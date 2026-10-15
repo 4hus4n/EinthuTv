@@ -19,6 +19,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -115,6 +116,7 @@ class BrowserActivity : Activity() {
     private lateinit var progress: ProgressBar
     private lateinit var hint: TextView
 
+    private lateinit var homeBtn: Button
     private lateinit var playerBar: LinearLayout
     private lateinit var playerTitle: TextView
     private lateinit var playerProgress: ProgressBar
@@ -162,6 +164,8 @@ class BrowserActivity : Activity() {
         playerState = findViewById(R.id.playerState)
         playerTime = findViewById(R.id.playerTime)
         seekFlash = findViewById(R.id.seekFlash)
+        homeBtn = findViewById(R.id.btnHome)
+        homeBtn.setOnClickListener { Nav.goHome(this) }
 
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
@@ -191,6 +195,13 @@ class BrowserActivity : Activity() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 // Redirect protection: only main-frame navigation to einthusan.tv is allowed
                 if (!request.isForMainFrame) return false
+                // Movie lists and the browse page open in the app's own screens
+                if (isAllowed(request.url) && Nav.isResults(request.url)) {
+                    Nav.openGrid(this@BrowserActivity, request.url.toString()); return true
+                }
+                if (isAllowed(request.url) && Nav.isBrowse(request.url)) {
+                    Nav.openBrowse(this@BrowserActivity); return true
+                }
                 return if (isAllowed(request.url)) false else {
                     toast(getString(R.string.blocked_redirect))
                     true
@@ -224,6 +235,7 @@ class BrowserActivity : Activity() {
                 fullscreenHolder.addView(view, FrameLayout.LayoutParams(-1, -1))
                 fullscreenHolder.visibility = View.VISIBLE
                 webView.visibility = View.GONE
+                homeBtn.visibility = View.GONE
                 hideSystemUi()
             }
 
@@ -285,6 +297,7 @@ class BrowserActivity : Activity() {
     private fun setTheater(on: Boolean) {
         if (theater == on) return
         theater = on
+        homeBtn.visibility = if (on) View.GONE else View.VISIBLE
         pollHandler.removeCallbacks(pollTask)
         if (on) {
             if (pointerMode) togglePointer()
@@ -513,6 +526,7 @@ class BrowserActivity : Activity() {
         fullscreenHolder.removeView(v)
         fullscreenHolder.visibility = View.GONE
         webView.visibility = View.VISIBLE
+        homeBtn.visibility = View.VISIBLE
         customView = null
         customCallback?.onCustomViewHidden()
         customCallback = null

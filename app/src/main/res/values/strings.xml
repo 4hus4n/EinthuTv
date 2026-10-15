@@ -24,4 +24,27 @@
     <string name="press_back_again">Press BACK again to go home</string>
     <string name="player_time">%1$s / %2$s</string>
     <string name="player_help">◀ ▶ seek   ·   OK pause   ·   BACK page</string>
+    <string name="home_button">⌂  Home</string>
+    <string name="prev">‹  Prev</string>
+    <string name="next">Next  ›</string>
+    <string name="page_n">Page %1$d</string>
+    <string name="grid_empty">No movies found here. Press OK to retry.</string>
+    <string name="grid_end">That\'s the end of this list.</string>
+    <string name="sec_lists">Lists</string>
+    <string name="sec_years">Years</string>
+    <string name="sec_decades">Decades</string>
+    <string name="sec_az">A – Z</string>
+    <string name="sec_more">Search &amp; more</string>
+    <string name="list_recent">Recently Added</string>
+    <string name="list_trending">Trending</string>
+    <string name="list_most_watched">Most Watched</string>
+    <string name="list_top_rated">Top Rated</string>
+    <string name="list_staff">Staff Picks</string>
+    <string name="list_regional">Regional Hits</string>
+    <string name="list_coming">Coming Soon</string>
+    <string name="search_on_site">Search / Cast on website</string>
+    <string name="row_trending">Trending in %1$s</string>
+    <string name="row_recent">Recently Added</string>
+    <string name="row_staff">Staff Picks</string>
+    <string name="see_all_arrow">See all</string>
 </resources>

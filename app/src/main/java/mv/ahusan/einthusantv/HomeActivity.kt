@@ -2,14 +2,11 @@ package mv.ahusan.einthusantv
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.Button
-import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -41,7 +38,6 @@ class HomeActivity : Activity() {
     private var lang = "malayalam"
     private var year = thisYear
     private var heroMovie: Movie? = null
-    private var firstCard: View? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,33 +62,35 @@ class HomeActivity : Activity() {
         btnSeeAll = findViewById(R.id.btnSeeAll)
 
         findViewById<Button>(R.id.tabHome).setOnClickListener { reload() }
-        findViewById<Button>(R.id.tabMovies).setOnClickListener { open(resultsUrl(year, 1)) }
-        findViewById<Button>(R.id.tabBrowse).setOnClickListener { open("https://einthusan.tv/movie/browse/?lang=$lang") }
-        findViewById<Button>(R.id.tabAccount).setOnClickListener { open("https://einthusan.tv/account/") }
+        findViewById<Button>(R.id.tabMovies).setOnClickListener { Nav.openGrid(this, Nav.yearUrl(lang, year)) }
+        findViewById<Button>(R.id.tabBrowse).setOnClickListener { Nav.openBrowse(this) }
+        findViewById<Button>(R.id.tabAccount).setOnClickListener { Nav.openWatch(this, "https://einthusan.tv/account/") }
 
         btnLang.setOnClickListener { pickLanguage() }
         btnYear.setOnClickListener { pickYear() }
-        btnPlay.setOnClickListener { heroMovie?.let { open(it.url) } }
-        btnSeeAll.setOnClickListener { open(resultsUrl(year, 1)) }
+        btnPlay.setOnClickListener { heroMovie?.let { Nav.openWatch(this, it.url) } }
+        btnSeeAll.setOnClickListener { Nav.openGrid(this, Nav.yearUrl(lang, year)) }
         status.setOnClickListener { reload() }
 
         reload()
         btnPlay.requestFocus()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Language may have been changed on the Browse screen
+        val saved = getSharedPreferences("einthutv", MODE_PRIVATE).getString("lang", lang) ?: lang
+        if (saved != lang) { lang = saved; reload() }
+    }
+
     // ---------- Data ----------
-
-    private fun resultsUrl(y: Int, page: Int) =
-        "https://einthusan.tv/movie/results/?find=Year&lang=$lang&page=$page&year=$y"
-
-    private fun langLabel() = lang.replaceFirstChar { it.uppercase() }
 
     private fun reload() {
         loader.cancelAll()
         rows.removeAllViews()
         heroMovie = null
-        firstCard = null
-        btnLang.text = getString(R.string.filter_language, langLabel())
+        val label = Nav.langLabel(lang)
+        btnLang.text = getString(R.string.filter_language, label)
         btnYear.text = getString(R.string.filter_year, year.toString())
         heroTitle.text = getString(R.string.loading)
         heroMeta.text = ""
@@ -102,75 +100,49 @@ class HomeActivity : Activity() {
         heroBg.setImageDrawable(null)
         status.visibility = View.GONE
 
-        addRow(getString(R.string.row_new, langLabel(), year.toString()), year, pages = 3, isMain = true)
-        if (year - 1 >= 1950) addRow(getString(R.string.row_year, year - 1), year - 1, pages = 2, isMain = false)
-        if (year - 2 >= 1950) addRow(getString(R.string.row_year, year - 2), year - 2, pages = 2, isMain = false)
+        addRow(getString(R.string.row_new, label, year.toString()), Nav.yearUrl(lang, year), pages = 3, isMain = true)
+        addRow(getString(R.string.row_trending, label), Nav.trendingUrl(lang), pages = 2, isMain = false)
+        addRow(getString(R.string.row_recent), Nav.recentUrl(lang), pages = 2, isMain = false)
+        addRow(getString(R.string.row_staff), Nav.staffPicksUrl(lang), pages = 1, isMain = false)
     }
 
-    private fun addRow(title: String, y: Int, pages: Int, isMain: Boolean) {
+    private fun addRow(title: String, url: String, pages: Int, isMain: Boolean) {
         val section = LayoutInflater.from(this).inflate(R.layout.row_section, rows, false)
         section.findViewById<TextView>(R.id.rowTitle).text = title
         val strip = section.findViewById<LinearLayout>(R.id.rowItems)
-        val scroller = section.findViewById<HorizontalScrollView>(R.id.rowScroll)
         rows.addView(section)
 
-        var count = 0
+        val seen = HashSet<String>()
         for (p in 1..pages) {
-            loader.load(resultsUrl(y, p)) { movies ->
-                movies.forEach { m ->
-                    strip.addView(makeCard(m))
-                    count++
+            loader.load(Nav.withPage(url, p)) { movies ->
+                movies.filter { seen.add(it.url) }.forEach { m ->
+                    strip.addView(Nav.movieCard(this, strip, m, lang) { showHero(it) })
                     if (isMain && heroMovie == null) showHero(m)
                 }
                 if (p == pages) {
-                    if (count == 0) {
+                    if (seen.isEmpty()) {
                         if (isMain) {
                             status.visibility = View.VISIBLE
                             status.text = getString(R.string.load_failed)
                             heroTitle.text = getString(R.string.no_movies)
+                        } else {
+                            section.visibility = View.GONE
                         }
-                        section.visibility = if (isMain) View.VISIBLE else View.GONE
                     }
-                    strip.addView(makeSeeAllCard(y))
+                    if (seen.isNotEmpty()) {
+                        strip.addView(Nav.seeAllCard(this, strip, getString(R.string.see_all_arrow)) {
+                            Nav.openGrid(this, url, title)
+                        })
+                    }
                 }
             }
         }
-        scroller.isFocusable = false
-    }
-
-    // ---------- Cards ----------
-
-    private fun makeCard(m: Movie): View {
-        val v = LayoutInflater.from(this).inflate(R.layout.item_card, rows, false)
-        val poster = v.findViewById<ImageView>(R.id.cardPoster)
-        v.findViewById<TextView>(R.id.cardTitle).text = m.title
-        v.findViewById<TextView>(R.id.cardMeta).text = listOf(m.year, langLabel()).filter { it.isNotBlank() }.joinToString("  •  ")
-        v.findViewById<TextView>(R.id.cardBadges).text = if (m.subtitles) "HD   CC" else "HD"
-        ImageLoader.load(m.poster, poster)
-        v.setOnClickListener { open(m.url) }
-        v.setOnFocusChangeListener { view, has ->
-            view.animate().scaleX(if (has) 1.08f else 1f).scaleY(if (has) 1.08f else 1f).setDuration(150).start()
-            view.elevation = if (has) 12f else 0f
-            if (has) showHero(m)
-        }
-        if (firstCard == null) firstCard = v
-        return v
-    }
-
-    private fun makeSeeAllCard(y: Int): View {
-        val v = LayoutInflater.from(this).inflate(R.layout.item_see_all, rows, false)
-        v.findViewById<TextView>(R.id.seeAllText).text = getString(R.string.see_all_year, y)
-        v.setOnClickListener { open(resultsUrl(y, 1)) }
-        v.setOnFocusChangeListener { view, has ->
-            view.animate().scaleX(if (has) 1.08f else 1f).scaleY(if (has) 1.08f else 1f).setDuration(150).start()
-        }
-        return v
     }
 
     private fun showHero(m: Movie) {
         heroMovie = m
         heroTitle.text = m.title
-        heroMeta.text = listOf(m.year, langLabel()).filter { it.isNotBlank() }.joinToString("  •  ")
+        heroMeta.text = listOf(m.year, Nav.langLabel(lang)).filter { it.isNotBlank() }.joinToString("  •  ")
         heroBadges.visibility = View.VISIBLE
         heroBadges.text = if (m.subtitles) " HD   CC " else " HD "
         heroDesc.text = m.synopsis
@@ -192,7 +164,7 @@ class HomeActivity : Activity() {
     }
 
     private fun pickYear() {
-        val years = (thisYear downTo 1950).map { it.toString() }
+        val years = (thisYear downTo 1961).map { it.toString() }
         val idx = years.indexOf(year.toString())
         AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
             .setTitle(R.string.choose_year)
@@ -206,10 +178,6 @@ class HomeActivity : Activity() {
     private fun save() {
         getSharedPreferences("einthutv", MODE_PRIVATE).edit()
             .putString("lang", lang).putInt("year", year).apply()
-    }
-
-    private fun open(url: String) {
-        startActivity(Intent(this, BrowserActivity::class.java).putExtra(BrowserActivity.EXTRA_URL, url))
     }
 
     override fun onDestroy() {

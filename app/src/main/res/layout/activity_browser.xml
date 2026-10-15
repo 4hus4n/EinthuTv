@@ -29,6 +29,17 @@
         android:max="100"
         android:progressTint="#E53935" />
 
+    <Button
+        android:id="@+id/btnHome"
+        style="@style/TopTab"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/home_chip"
+        android:elevation="8dp"
+        android:text="@string/home_button"
+        android:textColor="#FFFFFF" />
+
     <!-- Video-only player controls -->
     <LinearLayout
         android:id="@+id/playerBar"
