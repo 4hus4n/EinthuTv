@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="icon_bg">#3A1420</color>
+    <color name="bg">#0B0D12</color>
+    <color name="bar">#07080C</color>
+    <color name="accent">#E53935</color>
 </resources>
