@@ -70,6 +70,21 @@ object Nav {
         ctx.startActivity(Intent(ctx, BrowserActivity::class.java).putExtra(BrowserActivity.EXTRA_URL, url))
     }
 
+    /** Opens a movie's watch page with its info for the loading screen. */
+    fun openMovie(ctx: Context, m: Movie, lang: String) {
+        ctx.startActivity(
+            Intent(ctx, BrowserActivity::class.java)
+                .putExtra(BrowserActivity.EXTRA_URL, m.url)
+                .putExtra(BrowserActivity.EXTRA_TITLE, m.title)
+                .putExtra(BrowserActivity.EXTRA_POSTER, m.poster)
+                .putExtra(BrowserActivity.EXTRA_DESC, m.synopsis)
+                .putExtra(
+                    BrowserActivity.EXTRA_META,
+                    listOf(m.year, langLabel(lang)).filter { it.isNotBlank() }.joinToString("  •  ")
+                )
+        )
+    }
+
     fun openGrid(ctx: Context, url: String, title: String = titleFor(url)) {
         ctx.startActivity(
             Intent(ctx, GridActivity::class.java)
@@ -114,7 +129,7 @@ object Nav {
             listOf(m.year, langLabel(lang)).filter { it.isNotBlank() }.joinToString("  •  ")
         v.findViewById<TextView>(R.id.cardBadges).text = if (m.subtitles) "HD   CC" else "HD"
         ImageLoader.load(m.poster, v.findViewById<ImageView>(R.id.cardPoster))
-        v.setOnClickListener { openWatch(act, m.url) }
+        v.setOnClickListener { openMovie(act, m, lang) }
         if (onFocus != null) v.setOnFocusChangeListener { _, has -> if (has) onFocus(m) }
         focusScale(v)
         return v

@@ -47,4 +47,9 @@
     <string name="row_recent">Recently Added</string>
     <string name="row_staff">Staff Picks</string>
     <string name="see_all_arrow">See all</string>
+    <string name="load_label">GETTING YOUR MOVIE READY</string>
+    <string name="load_opening">Opening movie…</string>
+    <string name="load_starting">Starting the player…</string>
+    <string name="load_buffering">Buffering, almost there…</string>
+    <string name="load_help">Taking a while? Press OK to show the page, or BACK to go back.</string>
 </resources>

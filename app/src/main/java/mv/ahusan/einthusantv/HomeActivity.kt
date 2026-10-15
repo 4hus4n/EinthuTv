@@ -68,7 +68,7 @@ class HomeActivity : Activity() {
 
         btnLang.setOnClickListener { pickLanguage() }
         btnYear.setOnClickListener { pickYear() }
-        btnPlay.setOnClickListener { heroMovie?.let { Nav.openWatch(this, it.url) } }
+        btnPlay.setOnClickListener { heroMovie?.let { Nav.openMovie(this, it, lang) } }
         btnSeeAll.setOnClickListener { Nav.openGrid(this, Nav.yearUrl(lang, year)) }
         status.setOnClickListener { reload() }
 

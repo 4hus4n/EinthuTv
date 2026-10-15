@@ -33,32 +33,59 @@ class BrowserActivity : Activity() {
 
     companion object {
         const val EXTRA_URL = "url"
+        const val EXTRA_TITLE = "title"
+        const val EXTRA_POSTER = "poster"
+        const val EXTRA_DESC = "desc"
+        const val EXTRA_META = "meta"
         private const val HOME = "https://einthusan.tv/"
         private const val POINTER_STEP = 28f
 
-        /** Video-only "theater" view for the site's own player, plus a small control API. */
+        /**
+         * Watch-page helper. Starts the site's own player (quality pick + play),
+         * reports what is playing, and shows the full movie video-only.
+         * Short videos (trailers/ads, 5 min or less) are left to play on the page.
+         */
         private val THEATER_JS = """
             (function(){
               if (window.__tv) return;
               var st = document.createElement('style');
               st.textContent =
-                'video.__tvfull{position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;' +
+                '.__tvfull{position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;' +
                 'max-width:none!important;max-height:none!important;z-index:2147483647!important;background:#000!important;' +
-                'object-fit:contain!important;transform:none!important;margin:0!important;}' +
+                'object-fit:contain!important;transform:none!important;margin:0!important;border:0!important;}' +
                 'html.__tvon,html.__tvon body{overflow:hidden!important;background:#000!important;}';
               document.head.appendChild(st);
-              var cur = null;
+
+              var cur = null, adSent = false, kicks = 0, qualityClicks = 0;
+              function bridge(fn, arg){ try { EinthuTvBridge[fn](arg); } catch(e) {} }
+              function docs(){
+                var ds = [document];
+                document.querySelectorAll('iframe').forEach(function(f){
+                  try { if (f.contentDocument) ds.push(f.contentDocument); } catch(e) {}
+                });
+                return ds;
+              }
+              function videos(){
+                var vs = [];
+                docs().forEach(function(d){ d.querySelectorAll('video').forEach(function(v){ vs.push(v); }); });
+                return vs;
+              }
+              function isShort(v){ return isFinite(v.duration) && v.duration > 0 && v.duration <= 300; }
               function main(){
                 var best = null;
-                document.querySelectorAll('video').forEach(function(v){
-                  if (isFinite(v.duration) && v.duration > 300 && (!best || v.duration > best.duration)) best = v;
+                videos().forEach(function(v){
+                  if (!isShort(v) && (!best || (v.duration || 0) > (best.duration || 0))) best = v;
                 });
                 return best;
+              }
+              function target(v){
+                return v.ownerDocument === document ? v : (v.ownerDocument.defaultView.frameElement || v);
               }
               function enter(v){
                 if (cur === v) return;
                 cur = v;
-                var p = v.parentElement;
+                var t = target(v);
+                var p = t.parentElement;
                 while (p && p !== document.body) {
                   var cs = getComputedStyle(p);
                   if (cs.transform !== 'none' || cs.filter !== 'none' || cs.perspective !== 'none') {
@@ -68,24 +95,61 @@ class BrowserActivity : Activity() {
                   }
                   p = p.parentElement;
                 }
-                v.classList.add('__tvfull');
+                t.classList.add('__tvfull');
+                if (t !== v) {
+                  v.style.setProperty('width','100%','important');
+                  v.style.setProperty('height','100%','important');
+                  v.style.setProperty('object-fit','contain','important');
+                }
                 v.controls = false;
                 document.documentElement.classList.add('__tvon');
-                try { EinthuTvBridge.theater(true); } catch(e) {}
+                bridge('theater', true);
               }
               function exit(){
                 if (!cur) return;
-                cur.classList.remove('__tvfull');
+                target(cur).classList.remove('__tvfull');
                 cur.controls = true;
                 document.documentElement.classList.remove('__tvon');
                 cur = null;
-                try { EinthuTvBridge.theater(false); } catch(e) {}
+                bridge('theater', false);
               }
-              // Only the full movie (longer than 5 min) goes video-only; short clips play in place.
-              document.addEventListener('playing', function(e){
-                var v = e.target;
-                if (v && v.tagName === 'VIDEO' && isFinite(v.duration) && v.duration > 300) enter(v);
-              }, true);
+              function textOf(el){ return (el.textContent || '').replace(/\s+/g,' ').trim(); }
+              function clickQuality(){
+                if (qualityClicks >= 2) return;
+                var els = [].slice.call(document.querySelectorAll('a,button,li,label,span,div'))
+                  .filter(function(e){ var t = textOf(e); return t.length < 40 && /(ultra high def|high definition)/i.test(t) && e.offsetParent !== null; });
+                if (!els.length) return;
+                var uhd = els.filter(function(e){ return /ultra/i.test(textOf(e)); });
+                var pick = (qualityClicks === 0 && uhd.length) ? uhd[uhd.length - 1]
+                         : els.filter(function(e){ return !/ultra/i.test(textOf(e)); }).pop() || els[els.length - 1];
+                qualityClicks++;
+                pick.click();
+              }
+              function kick(){
+                if (kicks >= 20) return;
+                kicks++;
+                clickQuality();
+                docs().forEach(function(d){
+                  d.querySelectorAll('.vjs-big-play-button,.jw-display-icon-container,.plyr__control--overlaid,button[aria-label="Play"],.play-button,#play-button')
+                    .forEach(function(b){ try { b.click(); } catch(e) {} });
+                });
+                videos().forEach(function(v){
+                  if (v.paused) { try { var pr = v.play(); if (pr && pr.catch) pr.catch(function(){}); } catch(e) {} }
+                });
+              }
+              var ticks = 0;
+              function tick(){
+                ticks++;
+                var vs = videos();
+                var playing = vs.filter(function(v){ return !v.paused && v.currentTime > 0.2; });
+                var movie = playing.filter(function(v){ return !isShort(v); })[0];
+                if (movie) { enter(movie); return; }
+                if (cur) return;
+                if (playing.length) { if (!adSent) { adSent = true; bridge('shortVideo', true); } return; }
+                if (ticks % 3 === 1) kick();
+              }
+              setInterval(tick, 500);
+
               window.__tv = {
                 state: function(){
                   var v = cur || main();
@@ -98,13 +162,8 @@ class BrowserActivity : Activity() {
                   var v = cur || main();
                   if (v && isFinite(v.duration)) v.currentTime = Math.max(0, Math.min(v.duration - 1, v.currentTime + s));
                 },
-                exit: exit,
-                enter: function(){ var v = main(); if (v) enter(v); }
+                exit: exit
               };
-              setTimeout(function(){
-                var v = document.querySelector('video');
-                if (v && v.paused) { var pr = v.play(); if (pr && pr.catch) pr.catch(function(){}); }
-              }, 1500);
             })();
         """.trimIndent()
     }
@@ -115,8 +174,8 @@ class BrowserActivity : Activity() {
     private lateinit var pointer: ImageView
     private lateinit var progress: ProgressBar
     private lateinit var hint: TextView
-
     private lateinit var homeBtn: Button
+
     private lateinit var playerBar: LinearLayout
     private lateinit var playerTitle: TextView
     private lateinit var playerProgress: ProgressBar
@@ -124,19 +183,29 @@ class BrowserActivity : Activity() {
     private lateinit var playerTime: TextView
     private lateinit var seekFlash: TextView
 
+    private lateinit var loadingView: View
+    private lateinit var loadTitle: TextView
+    private lateinit var loadMeta: TextView
+    private lateinit var loadDesc: TextView
+    private lateinit var loadStatus: TextView
+    private lateinit var loadHelp: TextView
+
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
 
     private var pointerMode = false
     private var theater = false
+    private var loading = false
     private var videoPaused = false
     private var px = 0f
     private var py = 0f
     private var lastBackPress = 0L
+    private var movieTitle: String? = null
 
     private val hintHandler = Handler(Looper.getMainLooper())
     private val overlayHandler = Handler(Looper.getMainLooper())
     private val pollHandler = Handler(Looper.getMainLooper())
+    private val loadHandler = Handler(Looper.getMainLooper())
 
     private val pollTask = object : Runnable {
         override fun run() {
@@ -167,6 +236,23 @@ class BrowserActivity : Activity() {
         homeBtn = findViewById(R.id.btnHome)
         homeBtn.setOnClickListener { Nav.goHome(this) }
 
+        loadingView = findViewById(R.id.loadingView)
+        loadTitle = findViewById(R.id.loadTitle)
+        loadMeta = findViewById(R.id.loadMeta)
+        loadDesc = findViewById(R.id.loadDesc)
+        loadStatus = findViewById(R.id.loadStatus)
+        loadHelp = findViewById(R.id.loadHelp)
+
+        // Movie info passed from the app's cards
+        movieTitle = intent.getStringExtra(EXTRA_TITLE)
+        loadTitle.text = movieTitle ?: ""
+        loadMeta.text = intent.getStringExtra(EXTRA_META) ?: ""
+        loadDesc.text = intent.getStringExtra(EXTRA_DESC) ?: ""
+        intent.getStringExtra(EXTRA_POSTER)?.let {
+            ImageLoader.load(it, findViewById(R.id.loadPoster))
+            ImageLoader.load(it, findViewById(R.id.loadBg))
+        }
+
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
 
@@ -187,7 +273,16 @@ class BrowserActivity : Activity() {
         webView.addJavascriptInterface(object {
             @JavascriptInterface
             fun theater(on: Boolean) {
-                runOnUiThread { setTheater(on) }
+                runOnUiThread {
+                    if (on) hideLoading()
+                    setTheater(on)
+                }
+            }
+
+            @JavascriptInterface
+            fun shortVideo(on: Boolean) {
+                // A trailer or ad is playing on the page: show the page so it can be seen
+                runOnUiThread { if (on) hideLoading() }
             }
         }, "EinthuTvBridge")
 
@@ -211,12 +306,19 @@ class BrowserActivity : Activity() {
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 progress.visibility = View.VISIBLE
                 if (theater) setTheater(false)
+                if (isWatchPage(url)) showLoading() else hideLoading()
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
                 progress.visibility = View.GONE
                 injectTvHelpers()
-                if (isWatchPage(url)) webView.evaluateJavascript(THEATER_JS, null)
+                if (isWatchPage(url)) {
+                    webView.evaluateJavascript(THEATER_JS, null)
+                    if (loading) {
+                        loadStatus.text = getString(R.string.load_starting)
+                        if (loadTitle.text.isNullOrBlank()) loadTitle.text = cleanTitle(view.title)
+                    }
+                }
                 CookieManager.getInstance().flush()
             }
         }
@@ -230,6 +332,7 @@ class BrowserActivity : Activity() {
                 if (customView != null) {
                     callback.onCustomViewHidden(); return
                 }
+                hideLoading()
                 customView = view
                 customCallback = callback
                 fullscreenHolder.addView(view, FrameLayout.LayoutParams(-1, -1))
@@ -245,6 +348,7 @@ class BrowserActivity : Activity() {
         }
 
         val start = intent.getStringExtra(EXTRA_URL) ?: HOME
+        if (isWatchPage(start)) showLoading()
         if (savedInstanceState != null) webView.restoreState(savedInstanceState) else webView.loadUrl(start)
 
         root.post {
@@ -292,16 +396,41 @@ class BrowserActivity : Activity() {
         webView.evaluateJavascript(js, null)
     }
 
+    // ---------- Loading screen ----------
+
+    private fun showLoading() {
+        if (loading) return
+        loading = true
+        loadingView.visibility = View.VISIBLE
+        homeBtn.visibility = View.GONE
+        loadStatus.text = getString(R.string.load_opening)
+        loadHelp.visibility = View.GONE
+        loadHandler.removeCallbacksAndMessages(null)
+        loadHandler.postDelayed({ if (loading) loadStatus.text = getString(R.string.load_buffering) }, 9000)
+        loadHandler.postDelayed({ if (loading) loadHelp.visibility = View.VISIBLE }, 15000)
+    }
+
+    private fun hideLoading() {
+        if (!loading) return
+        loading = false
+        loadHandler.removeCallbacksAndMessages(null)
+        loadingView.animate().alpha(0f).setDuration(300).withEndAction {
+            loadingView.visibility = View.GONE
+            loadingView.alpha = 1f
+        }.start()
+        if (!theater && customView == null) homeBtn.visibility = View.VISIBLE
+    }
+
     // ---------- Video-only player ----------
 
     private fun setTheater(on: Boolean) {
         if (theater == on) return
         theater = on
-        homeBtn.visibility = if (on) View.GONE else View.VISIBLE
+        homeBtn.visibility = if (on || loading) View.GONE else View.VISIBLE
         pollHandler.removeCallbacks(pollTask)
         if (on) {
             if (pointerMode) togglePointer()
-            playerTitle.text = cleanTitle(webView.title)
+            playerTitle.text = movieTitle ?: cleanTitle(webView.title)
             showOverlay()
             pollHandler.post(pollTask)
         } else {
@@ -311,7 +440,8 @@ class BrowserActivity : Activity() {
     }
 
     private fun cleanTitle(t: String?): String =
-        (t ?: "").replace(Regex("\\s*[-|]\\s*Einthusan.*$", RegexOption.IGNORE_CASE), "").trim()
+        (t ?: "").replace(Regex("\\s*[-|]\\s*Einthusan.*$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^Watch\\s+", RegexOption.IGNORE_CASE), "").trim()
 
     private fun showOverlay() {
         if (!theater) return
@@ -413,6 +543,14 @@ class BrowserActivity : Activity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val code = event.keyCode
 
+        // Loading screen: OK shows the page once the "taking a while" help is visible
+        if (loading && code != KeyEvent.KEYCODE_BACK) {
+            if (isOk(code) && event.action == KeyEvent.ACTION_UP && loadHelp.visibility == View.VISIBLE) {
+                hideLoading()
+            }
+            return true
+        }
+
         // Video-only player controls
         if (theater && customView == null && code != KeyEvent.KEYCODE_BACK) {
             val down = event.action == KeyEvent.ACTION_DOWN
@@ -504,6 +642,7 @@ class BrowserActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         when {
+            loading -> finish()
             customView != null -> exitFullscreen()
             theater -> {
                 webView.evaluateJavascript("window.__tv && window.__tv.exit()", null)
@@ -573,6 +712,7 @@ class BrowserActivity : Activity() {
         hintHandler.removeCallbacksAndMessages(null)
         overlayHandler.removeCallbacksAndMessages(null)
         pollHandler.removeCallbacksAndMessages(null)
+        loadHandler.removeCallbacksAndMessages(null)
         webView.destroy()
         super.onDestroy()
     }
