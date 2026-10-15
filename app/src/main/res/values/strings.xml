@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EinthuTv</string>
+    <string name="subtitle">South Asian films on your TV</string>
+    <string name="browse_all">Browse all</string>
+    <string name="sign_in">Sign in / Premium</string>
+    <string name="tip">Tip: press MENU on the remote to switch to pointer mode</string>
+    <string name="pointer_on">Pointer mode ON — arrows move, OK clicks, MENU to exit</string>
+    <string name="pointer_off">Pointer mode OFF</string>
+    <string name="blocked_redirect">Blocked a redirect to another site</string>
+    <string name="press_back_again">Press BACK again to go home</string>
+</resources>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="0" android:startColor="#3A1420" android:endColor="#1A1030" />
+        </shape>
+    </item>
+    <item android:gravity="center" android:width="160dp" android:height="90dp">
+        <vector android:width="160dp" android:height="90dp"
+            android:viewportWidth="160" android:viewportHeight="90">
+            <!-- Film strip -->
+            <path android:fillColor="#FFB300" android:pathData="M20,25 h34 v40 h-34 z" />
+            <path android:fillColor="#3A1420" android:pathData="M23,28 h4 v4 h-4 z M23,38 h4 v4 h-4 z M23,48 h4 v4 h-4 z M23,58 h4 v4 h-4 z M47,28 h4 v4 h-4 z M47,38 h4 v4 h-4 z M47,48 h4 v4 h-4 z M47,58 h4 v4 h-4 z" />
+            <path android:fillColor="#3A1420" android:pathData="M33,37 L33,53 L44,45 Z" />
+            <!-- "TV" bars -->
+            <path android:fillColor="#FFFFFF" android:pathData="M66,32 h70 v6 h-70 z M66,44 h54 v6 h-54 z M66,56 h38 v6 h-38 z" />
+        </vector>
+    </item>
+</layer-list>

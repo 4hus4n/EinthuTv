@@ -1,0 +1,315 @@
+package mv.ahusan.einthusantv
+
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import android.webkit.CookieManager
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
+
+class BrowserActivity : Activity() {
+
+    companion object {
+        const val EXTRA_URL = "url"
+        private const val HOME = "https://einthusan.tv/"
+        private const val POINTER_STEP = 28f
+    }
+
+    private lateinit var webView: WebView
+    private lateinit var root: FrameLayout
+    private lateinit var fullscreenHolder: FrameLayout
+    private lateinit var pointer: ImageView
+    private lateinit var progress: ProgressBar
+    private lateinit var hint: TextView
+
+    private var customView: View? = null
+    private var customCallback: WebChromeClient.CustomViewCallback? = null
+
+    private var pointerMode = false
+    private var px = 0f
+    private var py = 0f
+    private var lastBackPress = 0L
+    private val handler = Handler(Looper.getMainLooper())
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        setContentView(R.layout.activity_browser)
+
+        root = findViewById(R.id.root)
+        webView = findViewById(R.id.webView)
+        fullscreenHolder = findViewById(R.id.fullscreenHolder)
+        pointer = findViewById(R.id.pointer)
+        progress = findViewById(R.id.progress)
+        hint = findViewById(R.id.hint)
+
+        CookieManager.getInstance().setAcceptCookie(true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            mediaPlaybackRequiresUserGesture = false
+            loadWithOverviewMode = true
+            useWideViewPort = true
+            builtInZoomControls = false
+            displayZoomControls = false
+            // Pop-up protection: pages cannot open new windows
+            javaScriptCanOpenWindowsAutomatically = false
+            setSupportMultipleWindows(false)
+            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        }
+
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                // Redirect protection: only main-frame navigation to einthusan.tv is allowed
+                if (!request.isForMainFrame) return false
+                return if (isAllowed(request.url)) false else {
+                    toast(getString(R.string.blocked_redirect))
+                    true
+                }
+            }
+
+            override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                progress.visibility = View.VISIBLE
+            }
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                progress.visibility = View.GONE
+                injectTvHelpers()
+                CookieManager.getInstance().flush()
+            }
+        }
+
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onProgressChanged(view: WebView, newProgress: Int) {
+                progress.progress = newProgress
+            }
+
+            override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                if (customView != null) {
+                    callback.onCustomViewHidden(); return
+                }
+                customView = view
+                customCallback = callback
+                fullscreenHolder.addView(view, FrameLayout.LayoutParams(-1, -1))
+                fullscreenHolder.visibility = View.VISIBLE
+                webView.visibility = View.GONE
+                hideSystemUi()
+            }
+
+            override fun onHideCustomView() {
+                exitFullscreen()
+            }
+        }
+
+        val start = intent.getStringExtra(EXTRA_URL) ?: HOME
+        if (savedInstanceState != null) webView.restoreState(savedInstanceState) else webView.loadUrl(start)
+
+        root.post {
+            px = root.width / 2f
+            py = root.height / 2f
+            movePointer(0f, 0f)
+        }
+        hideSystemUi()
+    }
+
+    private fun isAllowed(uri: Uri): Boolean {
+        val host = uri.host?.lowercase() ?: return false
+        val scheme = uri.scheme?.lowercase()
+        if (scheme != "https" && scheme != "http") return false
+        return host == "einthusan.tv" || host.endsWith(".einthusan.tv") ||
+            host == "einthusan.com" || host.endsWith(".einthusan.com")
+    }
+
+    /** Adds a visible focus ring and makes links/buttons reachable with the D-pad. */
+    private fun injectTvHelpers() {
+        val js = """
+            (function(){
+              if (window.__tvHelpers) return; window.__tvHelpers = true;
+              var s = document.createElement('style');
+              s.textContent = 'a:focus,button:focus,input:focus,select:focus,[tabindex]:focus,[role=button]:focus{outline:4px solid #ffb300 !important;outline-offset:2px !important;box-shadow:0 0 0 6px rgba(255,179,0,.35) !important;}';
+              document.head.appendChild(s);
+              window.open = function(){ return null; };
+              function mark(){
+                document.querySelectorAll('[onclick],[role=button],.button,li[data-url]').forEach(function(el){
+                  if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex','0');
+                });
+              }
+              mark();
+              new MutationObserver(mark).observe(document.body,{childList:true,subtree:true});
+              document.addEventListener('keydown',function(e){
+                if ((e.key==='Enter') && document.activeElement && document.activeElement.tagName!=='A'
+                    && document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='BUTTON') {
+                  document.activeElement.click();
+                }
+              },true);
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
+    }
+
+    // ---------- Pointer mode ----------
+
+    private fun togglePointer() {
+        pointerMode = !pointerMode
+        pointer.visibility = if (pointerMode) View.VISIBLE else View.GONE
+        showHint(getString(if (pointerMode) R.string.pointer_on else R.string.pointer_off))
+    }
+
+    private fun movePointer(dx: Float, dy: Float) {
+        val w = root.width.toFloat()
+        val h = root.height.toFloat()
+        px = (px + dx).coerceIn(0f, w - 1)
+        py = (py + dy).coerceIn(0f, h - 1)
+        pointer.x = px
+        pointer.y = py
+        // Scroll the page when the pointer pushes against the top/bottom edge
+        val edge = 40f
+        if (dy > 0 && py >= h - edge) webView.scrollBy(0, 120)
+        if (dy < 0 && py <= edge) webView.scrollBy(0, -120)
+    }
+
+    private fun clickAtPointer() {
+        val loc = IntArray(2)
+        webView.getLocationOnScreen(loc)
+        val rootLoc = IntArray(2)
+        root.getLocationOnScreen(rootLoc)
+        val x = px + rootLoc[0] - loc[0]
+        val y = py + rootLoc[1] - loc[1]
+        val t = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0)
+        val up = MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, x, y, 0)
+        webView.dispatchTouchEvent(down)
+        webView.dispatchTouchEvent(up)
+        down.recycle(); up.recycle()
+    }
+
+    // ---------- Keys ----------
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val code = event.keyCode
+
+        // Toggle pointer: Menu button, or Y on a gamepad
+        if (code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_BUTTON_Y ||
+            code == KeyEvent.KEYCODE_PROG_RED) {
+            if (event.action == KeyEvent.ACTION_UP) togglePointer()
+            return true
+        }
+
+        if (pointerMode && customView == null) {
+            val step = if (event.repeatCount > 3) POINTER_STEP * 2.5f else POINTER_STEP
+            when (code) {
+                KeyEvent.KEYCODE_DPAD_UP -> { if (event.action == KeyEvent.ACTION_DOWN) movePointer(0f, -step); return true }
+                KeyEvent.KEYCODE_DPAD_DOWN -> { if (event.action == KeyEvent.ACTION_DOWN) movePointer(0f, step); return true }
+                KeyEvent.KEYCODE_DPAD_LEFT -> { if (event.action == KeyEvent.ACTION_DOWN) movePointer(-step, 0f); return true }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> { if (event.action == KeyEvent.ACTION_DOWN) movePointer(step, 0f); return true }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    if (event.action == KeyEvent.ACTION_UP) clickAtPointer()
+                    return true
+                }
+            }
+        }
+
+        // Media keys -> HTML5 video on the page
+        if (event.action == KeyEvent.ACTION_UP) {
+            val js = when (code) {
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "var v=document.querySelector('video');if(v){v.paused?v.play():v.pause();}"
+                KeyEvent.KEYCODE_MEDIA_PLAY -> "var v=document.querySelector('video');if(v)v.play();"
+                KeyEvent.KEYCODE_MEDIA_PAUSE -> "var v=document.querySelector('video');if(v)v.pause();"
+                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "var v=document.querySelector('video');if(v)v.currentTime+=30;"
+                KeyEvent.KEYCODE_MEDIA_REWIND -> "var v=document.querySelector('video');if(v)v.currentTime-=10;"
+                else -> null
+            }
+            if (js != null) { webView.evaluateJavascript(js, null); return true }
+        }
+
+        return super.dispatchKeyEvent(event)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        when {
+            customView != null -> exitFullscreen()
+            pointerMode -> togglePointer()
+            webView.canGoBack() -> webView.goBack()
+            SystemClock.uptimeMillis() - lastBackPress < 2000 -> super.onBackPressed()
+            else -> {
+                lastBackPress = SystemClock.uptimeMillis()
+                toast(getString(R.string.press_back_again))
+            }
+        }
+    }
+
+    // ---------- Helpers ----------
+
+    private fun exitFullscreen() {
+        val v = customView ?: return
+        fullscreenHolder.removeView(v)
+        fullscreenHolder.visibility = View.GONE
+        webView.visibility = View.VISIBLE
+        customView = null
+        customCallback?.onCustomViewHidden()
+        customCallback = null
+        webView.requestFocus()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun hideSystemUi() {
+        window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
+            or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+            or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
+    }
+
+    private fun showHint(text: String) {
+        hint.text = text
+        hint.visibility = View.VISIBLE
+        handler.removeCallbacksAndMessages(null)
+        handler.postDelayed({ hint.visibility = View.GONE }, 2500)
+    }
+
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        webView.saveState(outState)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        webView.onPause()
+        CookieManager.getInstance().flush()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webView.onResume()
+        hideSystemUi()
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        webView.destroy()
+        super.onDestroy()
+    }
+}
