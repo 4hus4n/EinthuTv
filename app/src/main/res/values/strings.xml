@@ -22,4 +22,6 @@
     <string name="pointer_off">Pointer mode OFF</string>
     <string name="blocked_redirect">Blocked a redirect to another site</string>
     <string name="press_back_again">Press BACK again to go home</string>
+    <string name="player_time">%1$s / %2$s</string>
+    <string name="player_help">◀ ▶ seek   ·   OK pause   ·   BACK page</string>
 </resources>

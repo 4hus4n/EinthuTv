@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -20,9 +21,12 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import org.json.JSONObject
+import org.json.JSONTokener
 
 class BrowserActivity : Activity() {
 
@@ -30,6 +34,78 @@ class BrowserActivity : Activity() {
         const val EXTRA_URL = "url"
         private const val HOME = "https://einthusan.tv/"
         private const val POINTER_STEP = 28f
+
+        /** Video-only "theater" view for the site's own player, plus a small control API. */
+        private val THEATER_JS = """
+            (function(){
+              if (window.__tv) return;
+              var st = document.createElement('style');
+              st.textContent =
+                'video.__tvfull{position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;' +
+                'max-width:none!important;max-height:none!important;z-index:2147483647!important;background:#000!important;' +
+                'object-fit:contain!important;transform:none!important;margin:0!important;}' +
+                'html.__tvon,html.__tvon body{overflow:hidden!important;background:#000!important;}';
+              document.head.appendChild(st);
+              var cur = null;
+              function main(){
+                var best = null;
+                document.querySelectorAll('video').forEach(function(v){
+                  if (isFinite(v.duration) && v.duration > 300 && (!best || v.duration > best.duration)) best = v;
+                });
+                return best;
+              }
+              function enter(v){
+                if (cur === v) return;
+                cur = v;
+                var p = v.parentElement;
+                while (p && p !== document.body) {
+                  var cs = getComputedStyle(p);
+                  if (cs.transform !== 'none' || cs.filter !== 'none' || cs.perspective !== 'none') {
+                    p.style.setProperty('transform','none','important');
+                    p.style.setProperty('filter','none','important');
+                    p.style.setProperty('perspective','none','important');
+                  }
+                  p = p.parentElement;
+                }
+                v.classList.add('__tvfull');
+                v.controls = false;
+                document.documentElement.classList.add('__tvon');
+                try { EinthuTvBridge.theater(true); } catch(e) {}
+              }
+              function exit(){
+                if (!cur) return;
+                cur.classList.remove('__tvfull');
+                cur.controls = true;
+                document.documentElement.classList.remove('__tvon');
+                cur = null;
+                try { EinthuTvBridge.theater(false); } catch(e) {}
+              }
+              // Only the full movie (longer than 5 min) goes video-only; short clips play in place.
+              document.addEventListener('playing', function(e){
+                var v = e.target;
+                if (v && v.tagName === 'VIDEO' && isFinite(v.duration) && v.duration > 300) enter(v);
+              }, true);
+              window.__tv = {
+                state: function(){
+                  var v = cur || main();
+                  if (!v) return null;
+                  var b = v.buffered.length ? v.buffered.end(v.buffered.length - 1) : 0;
+                  return JSON.stringify({t: v.currentTime, d: v.duration, p: v.paused, b: b, on: !!cur});
+                },
+                toggle: function(){ var v = cur || main(); if (v) { if (v.paused) v.play(); else v.pause(); } },
+                seek: function(s){
+                  var v = cur || main();
+                  if (v && isFinite(v.duration)) v.currentTime = Math.max(0, Math.min(v.duration - 1, v.currentTime + s));
+                },
+                exit: exit,
+                enter: function(){ var v = main(); if (v) enter(v); }
+              };
+              setTimeout(function(){
+                var v = document.querySelector('video');
+                if (v && v.paused) { var pr = v.play(); if (pr && pr.catch) pr.catch(function(){}); }
+              }, 1500);
+            })();
+        """.trimIndent()
     }
 
     private lateinit var webView: WebView
@@ -39,16 +115,36 @@ class BrowserActivity : Activity() {
     private lateinit var progress: ProgressBar
     private lateinit var hint: TextView
 
+    private lateinit var playerBar: LinearLayout
+    private lateinit var playerTitle: TextView
+    private lateinit var playerProgress: ProgressBar
+    private lateinit var playerState: TextView
+    private lateinit var playerTime: TextView
+    private lateinit var seekFlash: TextView
+
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
 
     private var pointerMode = false
+    private var theater = false
+    private var videoPaused = false
     private var px = 0f
     private var py = 0f
     private var lastBackPress = 0L
-    private val handler = Handler(Looper.getMainLooper())
 
-    @SuppressLint("SetJavaScriptEnabled")
+    private val hintHandler = Handler(Looper.getMainLooper())
+    private val overlayHandler = Handler(Looper.getMainLooper())
+    private val pollHandler = Handler(Looper.getMainLooper())
+
+    private val pollTask = object : Runnable {
+        override fun run() {
+            if (!theater) return
+            pollState()
+            pollHandler.postDelayed(this, 500)
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -60,6 +156,12 @@ class BrowserActivity : Activity() {
         pointer = findViewById(R.id.pointer)
         progress = findViewById(R.id.progress)
         hint = findViewById(R.id.hint)
+        playerBar = findViewById(R.id.playerBar)
+        playerTitle = findViewById(R.id.playerTitle)
+        playerProgress = findViewById(R.id.playerProgress)
+        playerState = findViewById(R.id.playerState)
+        playerTime = findViewById(R.id.playerTime)
+        seekFlash = findViewById(R.id.seekFlash)
 
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
@@ -78,6 +180,13 @@ class BrowserActivity : Activity() {
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         }
 
+        webView.addJavascriptInterface(object {
+            @JavascriptInterface
+            fun theater(on: Boolean) {
+                runOnUiThread { setTheater(on) }
+            }
+        }, "EinthuTvBridge")
+
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 // Redirect protection: only main-frame navigation to einthusan.tv is allowed
@@ -90,11 +199,13 @@ class BrowserActivity : Activity() {
 
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 progress.visibility = View.VISIBLE
+                if (theater) setTheater(false)
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
                 progress.visibility = View.GONE
                 injectTvHelpers()
+                if (isWatchPage(url)) webView.evaluateJavascript(THEATER_JS, null)
                 CookieManager.getInstance().flush()
             }
         }
@@ -140,6 +251,8 @@ class BrowserActivity : Activity() {
             host == "einthusan.com" || host.endsWith(".einthusan.com")
     }
 
+    private fun isWatchPage(url: String?) = url?.contains("/movie/watch/") == true
+
     /** Adds a visible focus ring and makes links/buttons reachable with the D-pad. */
     private fun injectTvHelpers() {
         val js = """
@@ -165,6 +278,79 @@ class BrowserActivity : Activity() {
             })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)
+    }
+
+    // ---------- Video-only player ----------
+
+    private fun setTheater(on: Boolean) {
+        if (theater == on) return
+        theater = on
+        pollHandler.removeCallbacks(pollTask)
+        if (on) {
+            if (pointerMode) togglePointer()
+            playerTitle.text = cleanTitle(webView.title)
+            showOverlay()
+            pollHandler.post(pollTask)
+        } else {
+            playerBar.visibility = View.GONE
+            seekFlash.visibility = View.GONE
+        }
+    }
+
+    private fun cleanTitle(t: String?): String =
+        (t ?: "").replace(Regex("\\s*[-|]\\s*Einthusan.*$", RegexOption.IGNORE_CASE), "").trim()
+
+    private fun showOverlay() {
+        if (!theater) return
+        playerBar.visibility = View.VISIBLE
+        overlayHandler.removeCallbacksAndMessages(null)
+        overlayHandler.postDelayed({ if (!videoPaused) playerBar.visibility = View.GONE }, 4000)
+    }
+
+    private fun pollState() {
+        webView.evaluateJavascript("window.__tv ? window.__tv.state() : null") { raw ->
+            val json = try { JSONTokener(raw ?: "null").nextValue() as? String } catch (e: Exception) { null }
+                ?: return@evaluateJavascript
+            val o = try { JSONObject(json) } catch (e: Exception) { return@evaluateJavascript }
+            val t = o.optDouble("t", 0.0)
+            val d = o.optDouble("d", 0.0)
+            val b = o.optDouble("b", 0.0)
+            val paused = o.optBoolean("p", false)
+            if (paused != videoPaused) {
+                videoPaused = paused
+                if (paused) playerBar.visibility = View.VISIBLE else showOverlay()
+            }
+            playerState.text = if (paused) "▶" else "❚❚"
+            if (d > 0 && d.isFinite()) {
+                playerProgress.progress = ((t / d) * 1000).toInt()
+                playerProgress.secondaryProgress = ((b / d) * 1000).toInt()
+                playerTime.text = getString(R.string.player_time, fmt(t), fmt(d))
+            }
+        }
+    }
+
+    private fun fmt(sec: Double): String {
+        val s = sec.toInt().coerceAtLeast(0)
+        val h = s / 3600
+        val m = (s % 3600) / 60
+        val r = s % 60
+        return if (h > 0) String.format("%d:%02d:%02d", h, m, r) else String.format("%d:%02d", m, r)
+    }
+
+    private fun seekBy(sec: Int) {
+        webView.evaluateJavascript("window.__tv && window.__tv.seek($sec)", null)
+        seekFlash.text = if (sec > 0) "+${sec}s  ⏩" else "⏪  ${sec}s"
+        seekFlash.visibility = View.VISIBLE
+        hintHandler.removeCallbacksAndMessages(null)
+        hintHandler.postDelayed({ seekFlash.visibility = View.GONE; hint.visibility = View.GONE }, 900)
+        showOverlay()
+        pollState()
+    }
+
+    private fun togglePlay() {
+        webView.evaluateJavascript("window.__tv && window.__tv.toggle()", null)
+        showOverlay()
+        pollHandler.postDelayed({ pollState() }, 150)
     }
 
     // ---------- Pointer mode ----------
@@ -213,6 +399,32 @@ class BrowserActivity : Activity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val code = event.keyCode
+
+        // Video-only player controls
+        if (theater && customView == null && code != KeyEvent.KEYCODE_BACK) {
+            val down = event.action == KeyEvent.ACTION_DOWN
+            val up = event.action == KeyEvent.ACTION_UP
+            when {
+                isOk(code) || code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ||
+                    code == KeyEvent.KEYCODE_MEDIA_PLAY || code == KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                    if (up) togglePlay()
+                    return true
+                }
+                code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                    if (down) seekBy(if (event.repeatCount >= 3) -30 else -10)
+                    return true
+                }
+                code == KeyEvent.KEYCODE_DPAD_RIGHT || code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                    if (down) seekBy(if (event.repeatCount >= 3) 30 else 10)
+                    return true
+                }
+                code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN ||
+                    code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_INFO -> {
+                    if (up) { showOverlay(); pollState() }
+                    return true
+                }
+            }
+        }
 
         // Toggle pointer: Menu / Info / Guide / Settings button, or Y on a gamepad
         if (code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_BUTTON_Y ||
@@ -280,6 +492,10 @@ class BrowserActivity : Activity() {
     override fun onBackPressed() {
         when {
             customView != null -> exitFullscreen()
+            theater -> {
+                webView.evaluateJavascript("window.__tv && window.__tv.exit()", null)
+                setTheater(false)
+            }
             pointerMode -> togglePointer()
             webView.canGoBack() -> webView.goBack()
             SystemClock.uptimeMillis() - lastBackPress < 2000 -> super.onBackPressed()
@@ -315,8 +531,8 @@ class BrowserActivity : Activity() {
     private fun showHint(text: String) {
         hint.text = text
         hint.visibility = View.VISIBLE
-        handler.removeCallbacksAndMessages(null)
-        handler.postDelayed({ hint.visibility = View.GONE }, 2500)
+        hintHandler.removeCallbacksAndMessages(null)
+        hintHandler.postDelayed({ hint.visibility = View.GONE }, 2500)
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
@@ -336,10 +552,13 @@ class BrowserActivity : Activity() {
         super.onResume()
         webView.onResume()
         hideSystemUi()
+        if (theater) pollHandler.post(pollTask)
     }
 
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
+        hintHandler.removeCallbacksAndMessages(null)
+        overlayHandler.removeCallbacksAndMessages(null)
+        pollHandler.removeCallbacksAndMessages(null)
         webView.destroy()
         super.onDestroy()
     }
