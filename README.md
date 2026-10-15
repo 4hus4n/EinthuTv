@@ -14,7 +14,7 @@ Android TV app that opens einthusan.tv in a remote-friendly, full-screen shell.
 | Button | Action |
 |---|---|
 | Arrows / OK | Navigate and select |
-| MENU | Toggle pointer mode |
+| Hold OK (1 sec) or MENU | Toggle pointer mode |
 | BACK | Exit full screen → page back → home (press twice) |
 
 ## Build

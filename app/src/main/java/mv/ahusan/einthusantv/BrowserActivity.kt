@@ -205,14 +205,49 @@ class BrowserActivity : Activity() {
 
     // ---------- Keys ----------
 
+    private var okDown: KeyEvent? = null
+    private var okLongHandled = false
+
+    private fun isOk(code: Int) = code == KeyEvent.KEYCODE_DPAD_CENTER ||
+        code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_NUMPAD_ENTER
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val code = event.keyCode
 
-        // Toggle pointer: Menu button, or Y on a gamepad
+        // Toggle pointer: Menu / Info / Guide / Settings button, or Y on a gamepad
         if (code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_BUTTON_Y ||
-            code == KeyEvent.KEYCODE_PROG_RED) {
+            code == KeyEvent.KEYCODE_PROG_RED || code == KeyEvent.KEYCODE_INFO ||
+            code == KeyEvent.KEYCODE_GUIDE || code == KeyEvent.KEYCODE_SETTINGS) {
             if (event.action == KeyEvent.ACTION_UP) togglePointer()
             return true
+        }
+
+        // OK button: short press = normal click, hold ~1s = toggle pointer mode
+        if (isOk(code) && customView == null) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    if (event.repeatCount == 0) {
+                        okDown = KeyEvent(event)
+                        okLongHandled = false
+                    } else if (!okLongHandled && event.eventTime - event.downTime >= 800) {
+                        okLongHandled = true
+                        togglePointer()
+                    }
+                    return true
+                }
+                KeyEvent.ACTION_UP -> {
+                    val down = okDown
+                    okDown = null
+                    if (okLongHandled) return true
+                    if (pointerMode) {
+                        clickAtPointer()
+                    } else if (down != null) {
+                        super.dispatchKeyEvent(down)
+                        super.dispatchKeyEvent(event)
+                    }
+                    return true
+                }
+            }
         }
 
         if (pointerMode && customView == null) {
@@ -222,10 +257,6 @@ class BrowserActivity : Activity() {
                 KeyEvent.KEYCODE_DPAD_DOWN -> { if (event.action == KeyEvent.ACTION_DOWN) movePointer(0f, step); return true }
                 KeyEvent.KEYCODE_DPAD_LEFT -> { if (event.action == KeyEvent.ACTION_DOWN) movePointer(-step, 0f); return true }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> { if (event.action == KeyEvent.ACTION_DOWN) movePointer(step, 0f); return true }
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                    if (event.action == KeyEvent.ACTION_UP) clickAtPointer()
-                    return true
-                }
             }
         }
 
