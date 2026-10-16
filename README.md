@@ -19,3 +19,6 @@ Android TV app that opens einthusan.tv in a remote-friendly, full-screen shell.
 
 ## Build
 Push to `main` on GitHub. The **Build APK** workflow builds `EinthuTv.apk` and attaches it to a new Release.
+
+## Web version
+A web version for phones, laptops and TV browsers is in [`web/`](web/) — upload it to any PHP host (cPanel). See `web/README.md`.

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07080C">
+  <meta name="referrer" content="no-referrer">
+  <title>EinthuTv</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233A1420'/%3E%3Crect x='18' y='14' width='28' height='36' fill='%23FFB300'/%3E%3Cpath d='M28 24v16l11-8z' fill='%233A1420'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="logo" href="#/">EINTHU<span>TV</span></a>
+    <nav class="tabs" aria-label="Main">
+      <a href="#/" data-tab="home">Home</a>
+      <a href="#/movies" data-tab="movies">Movies</a>
+      <a href="#/browse" data-tab="browse">Browse</a>
+    </nav>
+    <a class="account" href="https://einthusan.tv/account/" target="_blank" rel="noopener">Sign in / Premium ↗</a>
+  </header>
+
+  <main id="view"></main>
+
+  <!-- Movie panel -->
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <button class="sheet-x" data-close aria-label="Close">✕</button>
+      <img id="sheetPoster" class="sheet-poster" alt="" referrerpolicy="no-referrer">
+      <div class="sheet-body">
+        <h2 id="sheetTitle"></h2>
+        <div class="meta"><span id="sheetMeta"></span> <span id="sheetBadges" class="badges"></span></div>
+        <p id="sheetDesc"></p>
+        <div class="actions">
+          <a id="sheetWatch" class="btn btn-primary" target="_blank" rel="noopener">▶&nbsp; Watch on Einthusan</a>
+          <button class="btn btn-outline" data-close>Close</button>
+        </div>
+        <p class="note">Opens einthusan.tv in a new tab. Sign in there once to watch with your Premium account.</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
