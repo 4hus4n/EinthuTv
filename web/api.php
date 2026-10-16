@@ -3,6 +3,10 @@
  * EinthuTv web — catalog API.
  * Fetches einthusan.tv movie list pages, reads the movie cards and returns JSON.
  * Only einthusan.tv results pages with whitelisted filters can be requested.
+ *
+ *   api.php?find=Year&lang=malayalam&year=2026&page=1&pages=3   -> movie list
+ *   api.php?action=versions&lang=tamil&year=2026&director=ID...  -> same film in other languages
+ *   add &debug=1 to a list request to see the raw HTML of the first card
  */
 
 header('Content-Type: application/json; charset=utf-8');
@@ -24,10 +28,57 @@ function fail($msg, $code = 400) {
     exit;
 }
 
-// ---------- Validate input ----------
+function out(array $data) {
+    echo json_encode(['ok' => true] + $data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0755, true);
 
 $lang = strtolower($_GET['lang'] ?? 'malayalam');
 if (!in_array($lang, $LANGS, true)) fail('Unknown language');
+
+// ---------- Other-language versions of one film ----------
+
+if (($_GET['action'] ?? '') === 'versions') {
+    $year = preg_match('/^(19|20)\d{2}$/', $_GET['year'] ?? '') ? $_GET['year'] : '';
+    $imdb = preg_match('/^tt\d{5,10}$/', $_GET['imdb'] ?? '') ? $_GET['imdb'] : '';
+    $director = preg_match('/^[A-Za-z0-9]{4,20}$/', $_GET['director'] ?? '') ? $_GET['director'] : '';
+    $lead = preg_match('/^[A-Za-z0-9]{4,20}$/', $_GET['lead'] ?? '') ? $_GET['lead'] : '';
+    $leadRole = preg_match('/^[A-Z_]{0,20}$/', $_GET['leadRole'] ?? '') ? ($_GET['leadRole'] ?? '') : '';
+    $self = $_GET['url'] ?? '';
+
+    // Look the film up through its director (or lead actor) in every other language
+    $person = $director ?: $lead;
+    $role = $director ? 'DIRECTOR' : $leadRole;
+    if ($person === '' || ($year === '' && $imdb === '')) out(['versions' => [], 'reason' => 'not enough info']);
+
+    $urls = [];
+    foreach ($LANGS as $L) {
+        if ($L === $lang) continue;
+        $urls[$L] = pageUrl(['find' => 'Cast', 'id' => $person, 'lang' => $L, 'role' => $role], 1);
+    }
+    $htmls = fetchAll(array_values($urls));
+
+    $versions = [];
+    foreach ($urls as $L => $u) {
+        $html = $htmls[$u] ?? null;
+        if (!$html) continue;
+        foreach (parseMovies($html) as $m) {
+            if ($m['url'] === $self) continue;
+            $match = ($imdb !== '' && $m['imdb'] !== '')
+                ? $m['imdb'] === $imdb
+                : ($year !== '' && $m['year'] === $year);
+            if ($match) {
+                $versions[] = ['lang' => $L, 'title' => $m['title'], 'url' => $m['url'], 'poster' => $m['poster']];
+                break;
+            }
+        }
+    }
+    out(['versions' => $versions]);
+}
+
+// ---------- Movie lists ----------
 
 $find = $_GET['find'] ?? 'Year';
 if (!in_array($find, $FINDS, true)) fail('Unknown list');
@@ -61,6 +112,41 @@ switch ($find) {
 
 $page = max(1, min(500, (int)($_GET['page'] ?? 1)));
 $pages = max(1, min(MAX_PAGES, (int)($_GET['pages'] ?? 1)));
+
+$urls = [];
+for ($p = $page; $p < $page + $pages; $p++) $urls[] = pageUrl($q, $p);
+
+$htmls = fetchAll($urls);
+
+if (!empty($_GET['debug'])) {
+    $html = $htmls[$urls[0]] ?? '';
+    out(['url' => $urls[0], 'firstCardHtml' => firstCardHtml((string)$html), 'parsed' => array_slice(parseMovies((string)$html), 0, 2)]);
+}
+
+$movies = [];
+$seen = [];
+$failed = 0;
+$lastCount = 0;
+foreach ($urls as $u) {
+    $html = $htmls[$u] ?? null;
+    if ($html === null) { $failed++; $lastCount = 0; continue; }
+    $list = parseMovies($html);
+    $lastCount = count($list);
+    foreach ($list as $m) {
+        if (isset($seen[$m['url']])) continue;
+        $seen[$m['url']] = 1;
+        $movies[] = $m;
+    }
+}
+
+if ($failed === count($urls)) fail('Could not reach einthusan.tv from this server', 502);
+
+out([
+    'page' => $page,
+    'pages' => $pages,
+    'hasMore' => $lastCount > 0,
+    'movies' => $movies,
+]);
 
 // ---------- Fetch (cached, parallel) ----------
 
@@ -146,13 +232,16 @@ function clean(string $s): string {
     return trim(preg_replace('/\s+/u', ' ', $s));
 }
 
-function parseMovies(string $html): array {
+function loadDoc(string $html): array {
     libxml_use_internal_errors(true);
     $doc = new DOMDocument();
     $doc->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
     libxml_clear_errors();
-    $xp = new DOMXPath($doc);
+    return [$doc, new DOMXPath($doc)];
+}
 
+/** @return DOMElement[] one element per movie card, keyed by watch URL */
+function findCards(DOMXPath $xp): array {
     $distinct = function (DOMNode $node) use ($xp): int {
         $keys = [];
         foreach ($xp->query('.//a[contains(@href,"/movie/watch/")]', $node) as $a) {
@@ -160,14 +249,10 @@ function parseMovies(string $html): array {
         }
         return count($keys);
     };
-
-    $movies = [];
-    $seen = [];
+    $cards = [];
     foreach ($xp->query('//a[contains(@href,"/movie/watch/")]') as $a) {
-        $href = $a->getAttribute('href');
-        $key = watchKey($href);
-        if (isset($seen[$key])) continue;
-
+        $key = watchKey($a->getAttribute('href'));
+        if (isset($cards[$key])) continue;
         // Climb to the largest element that holds only this movie
         $card = $a;
         while ($card->parentNode instanceof DOMElement
@@ -175,11 +260,28 @@ function parseMovies(string $html): array {
             && $distinct($card->parentNode) === 1) {
             $card = $card->parentNode;
         }
+        $cards[$key] = [$card, $a->getAttribute('href')];
+    }
+    return $cards;
+}
 
+function firstCardHtml(string $html): string {
+    if ($html === '') return '';
+    [$doc, $xp] = loadDoc($html);
+    foreach (findCards($xp) as [$card]) {
+        if ($xp->query('.//img', $card)->length) return mb_substr($doc->saveHTML($card), 0, 6000);
+    }
+    return '';
+}
+
+function parseMovies(string $html): array {
+    [$doc, $xp] = loadDoc($html);
+
+    $movies = [];
+    foreach (findCards($xp) as $key => [$card, $href]) {
         $img = $xp->query('.//img[contains(@src,"moviecovers") or contains(@data-src,"moviecovers") or contains(@src,"default-img")]', $card)->item(0)
             ?: $xp->query('.//img[@src or @data-src]', $card)->item(0);
         if (!$img) continue;
-        $seen[$key] = 1;
 
         $poster = $img->getAttribute('data-src') ?: $img->getAttribute('src');
 
@@ -208,6 +310,23 @@ function parseMovies(string $html): array {
             if (mb_strlen($t) > 40 && mb_strlen($t) > mb_strlen($synopsis)) $synopsis = $t;
         }
 
+        // IMDb id and cast/crew ids (used to find the same film in other languages)
+        $imdb = '';
+        foreach ($xp->query('.//a[contains(@href,"imdb.com/title/")]', $card) as $x) {
+            if (preg_match('~/title/(tt\d+)~', $x->getAttribute('href'), $im)) { $imdb = $im[1]; break; }
+        }
+        $director = '';
+        $lead = '';
+        $leadRole = '';
+        foreach ($xp->query('.//a[contains(@href,"find=Cast")]', $card) as $x) {
+            parse_str((string)parse_url(absUrl($x->getAttribute('href')), PHP_URL_QUERY), $cq);
+            $id = $cq['id'] ?? '';
+            $role = strtoupper($cq['role'] ?? '');
+            if (!preg_match('/^[A-Za-z0-9]{4,20}$/', $id)) continue;
+            if ($role === 'DIRECTOR' && $director === '') $director = $id;
+            elseif ($lead === '' && $role !== 'DIRECTOR' && $role !== 'MUSIC_DIRECTOR') { $lead = $id; $leadRole = $role; }
+        }
+
         $q = parse_url(absUrl($href), PHP_URL_QUERY);
         $movies[] = [
             'title' => $title,
@@ -216,42 +335,11 @@ function parseMovies(string $html): array {
             'year' => $year,
             'synopsis' => $synopsis,
             'subs' => stripos($doc->saveHTML($card), 'subtitle') !== false,
+            'imdb' => $imdb,
+            'director' => $director,
+            'lead' => $lead,
+            'leadRole' => $leadRole,
         ];
     }
     return $movies;
 }
-
-// ---------- Run ----------
-
-if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0755, true);
-
-$urls = [];
-for ($p = $page; $p < $page + $pages; $p++) $urls[] = pageUrl($q, $p);
-
-$htmls = fetchAll($urls);
-
-$movies = [];
-$seen = [];
-$failed = 0;
-$lastCount = 0;
-foreach ($urls as $u) {
-    $html = $htmls[$u] ?? null;
-    if ($html === null) { $failed++; $lastCount = 0; continue; }
-    $list = parseMovies($html);
-    $lastCount = count($list);
-    foreach ($list as $m) {
-        if (isset($seen[$m['url']])) continue;
-        $seen[$m['url']] = 1;
-        $movies[] = $m;
-    }
-}
-
-if ($failed === count($urls)) fail('Could not reach einthusan.tv from this server', 502);
-
-echo json_encode([
-    'ok' => true,
-    'page' => $page,
-    'pages' => $pages,
-    'hasMore' => $lastCount > 0,
-    'movies' => $movies,
-], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

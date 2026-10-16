@@ -235,6 +235,23 @@ img { display: block; }
 .sheet h2 { margin: 4px 0 0; font: 700 34px/1.1 Georgia, "Times New Roman", serif; }
 .sheet p { color: rgba(255, 255, 255, .82); line-height: 1.6; }
 .sheet .note { font-size: 13px; color: var(--muted); margin-top: 16px; }
+.versions { margin-top: 22px; }
+.versions-label { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.versions-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; min-height: 44px; align-items: center; }
+.lang-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 44px; padding: 0 18px; border-radius: 8px; font-size: 15px; font-weight: 700;
+  background: rgba(229, 57, 53, .14); border: 1px solid rgba(229, 57, 53, .55); color: #fff;
+}
+.lang-btn:hover { background: rgba(229, 57, 53, .3); border-color: var(--accent); }
+.lang-btn small { font-weight: 400; color: rgba(255, 255, 255, .7); }
+.versions-wait { font-size: 14px; color: var(--muted); }
+.versions-wait::before {
+  content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px;
+  border: 2px solid rgba(255, 255, 255, .25); border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- Phones / small screens ---------- */
 @media (max-width: 720px) {
@@ -269,3 +286,4 @@ img { display: block; }
   .hero { min-height: 460px; }
   .hero-poster { width: 260px; }
 }
+.versions-wait-none { font-size: 14px; color: var(--muted); }

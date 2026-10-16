@@ -352,9 +352,48 @@
     document.getElementById('sheetDesc').textContent = m.synopsis || '';
     var w = document.getElementById('sheetWatch');
     w.href = m.url;
+    w.textContent = '▶  Watch in ' + cap(state.lang);
     sheet.hidden = false;
     document.body.style.overflow = 'hidden';
     w.focus();
+    loadVersions(m);
+  }
+
+  // Same film in other languages (dubbed versions), found via its director / IMDb id
+  var versionsToken = 0;
+  function loadVersions(m) {
+    var box = document.getElementById('sheetLangs');
+    var token = ++versionsToken;
+    box.textContent = '';
+    if (!m.director && !m.lead) {
+      box.appendChild(el('span', { class: 'versions-wait', text: '' }));
+      box.parentNode.hidden = true;
+      return;
+    }
+    box.parentNode.hidden = false;
+    box.appendChild(el('span', { class: 'versions-wait', text: 'Checking other languages…' }));
+    api({
+      action: 'versions', lang: state.lang, url: m.url, year: m.year, imdb: m.imdb,
+      director: m.director, lead: m.lead, leadRole: m.leadRole
+    }).then(function (j) {
+      if (token !== versionsToken) return;
+      box.textContent = '';
+      if (!j.versions.length) {
+        box.appendChild(el('span', { class: 'versions-wait-none', text: 'Only in ' + cap(state.lang) }));
+        return;
+      }
+      j.versions.forEach(function (v) {
+        box.appendChild(el('a', { class: 'lang-btn', href: v.url, target: '_blank', rel: 'noopener',
+          title: v.title, onclick: function () { setTimeout(closeSheet, 300); } }, [
+          '▶ ' + cap(v.lang),
+          v.title && v.title.toLowerCase() !== m.title.toLowerCase() ? el('small', { text: v.title }) : null
+        ]));
+      });
+    }).catch(function () {
+      if (token !== versionsToken) return;
+      box.textContent = '';
+      box.appendChild(el('span', { class: 'versions-wait-none', text: 'Couldn’t check other languages' }));
+    });
   }
 
   function closeSheet() {
