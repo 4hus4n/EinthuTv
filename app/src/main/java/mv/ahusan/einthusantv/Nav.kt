@@ -71,17 +71,12 @@ object Nav {
     }
 
     /** Opens a movie's watch page with its info for the loading screen. */
+    /** Opens the movie details screen (watch + other-language versions). */
     fun openMovie(ctx: Context, m: Movie, lang: String) {
         ctx.startActivity(
-            Intent(ctx, BrowserActivity::class.java)
-                .putExtra(BrowserActivity.EXTRA_URL, m.url)
-                .putExtra(BrowserActivity.EXTRA_TITLE, m.title)
-                .putExtra(BrowserActivity.EXTRA_POSTER, m.poster)
-                .putExtra(BrowserActivity.EXTRA_DESC, m.synopsis)
-                .putExtra(
-                    BrowserActivity.EXTRA_META,
-                    listOf(m.year, langLabel(lang)).filter { it.isNotBlank() }.joinToString("  •  ")
-                )
+            Intent(ctx, MovieActivity::class.java)
+                .putExtra(MovieActivity.EXTRA_MOVIE, m)
+                .putExtra(MovieActivity.EXTRA_LANG, lang)
         )
     }
 

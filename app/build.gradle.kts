@@ -11,8 +11,8 @@ android {
         applicationId = "mv.ahusan.einthusantv"
         minSdk = 24
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.5"
+        versionCode = 7
+        versionName = "1.6"
     }
 
     buildTypes {
@@ -30,4 +30,8 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+dependencies {
+    implementation("org.jsoup:jsoup:1.17.2")
 }

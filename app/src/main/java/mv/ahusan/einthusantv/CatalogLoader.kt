@@ -104,7 +104,11 @@ class CatalogLoader(private val webView: WebView) {
                     poster = o.optString("poster"),
                     year = o.optString("year"),
                     synopsis = o.optString("synopsis"),
-                    subtitles = o.optBoolean("subs")
+                    subtitles = o.optBoolean("subs"),
+                    imdb = o.optString("imdb"),
+                    director = o.optString("director"),
+                    lead = o.optString("lead"),
+                    leadRole = o.optString("leadRole")
                 )
             }.filter { it.title.isNotBlank() && it.url.isNotBlank() }
         } catch (e: Exception) {
@@ -144,15 +148,34 @@ class CatalogLoader(private val webView: WebView) {
                   });
                 }
                 if(!title) title=img.getAttribute('alt')||'';
-                var text=c.textContent||'';
-                var ym=text.match(/\b(19|20)\d{2}\b/);
+                var year='';
+                var tw=document.createTreeWalker(c, NodeFilter.SHOW_TEXT), tn;
+                while((tn=tw.nextNode())){
+                  var mt=tn.nodeValue.match(/^\s*((?:19|20)\d{2})\s*$/); if(mt){ year=mt[1]; break; }
+                }
+                if(!year){ var ym=(c.textContent||'').match(/(?:^|\D)((?:19|20)\d{2})(?!\d)/); if(ym) year=ym[1]; }
                 var syn='';
                 c.querySelectorAll('p').forEach(function(p){
                   var t=p.textContent.trim(); if(t.length>syn.length && t.length>40) syn=t;
                 });
                 var subs=/subtitle/i.test(c.innerHTML);
+                var imdb='';
+                c.querySelectorAll('a[href*="imdb.com/title/"]').forEach(function(x){
+                  var mi=x.href.match(/\/title\/(tt\d+)/); if(mi && !imdb) imdb=mi[1];
+                });
+                var director='', lead='', leadRole='';
+                c.querySelectorAll('a[href*="find=Cast"]').forEach(function(x){
+                  try{
+                    var u=new URL(x.href, location.href), id=u.searchParams.get('id')||'',
+                        role=(u.searchParams.get('role')||'').toUpperCase();
+                    if(!/^[A-Za-z0-9]{4,20}$/.test(id)) return;
+                    if(role==='DIRECTOR'){ if(!director) director=id; }
+                    else if(!lead && role!=='MUSIC_DIRECTOR'){ lead=id; leadRole=role; }
+                  }catch(e){}
+                });
                 out.push({title:title.replace(/\s+/g,' '), url:k+'?'+(a.href.split('?')[1]||''),
-                  poster:poster, year:ym?ym[0]:'', synopsis:syn.replace(/\s+/g,' '), subs:subs});
+                  poster:poster, year:year, synopsis:syn.replace(/\s+/g,' '), subs:subs,
+                  imdb:imdb, director:director, lead:lead, leadRole:leadRole});
               });
               return JSON.stringify(out);
             })();
