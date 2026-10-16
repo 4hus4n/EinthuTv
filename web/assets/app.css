@@ -27,7 +27,8 @@ img { display: block; }
 .topbar {
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; gap: 28px;
-  height: 64px; padding: 0 var(--gutter);
+  height: calc(64px + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) var(--gutter) 0;
   background: rgba(7, 8, 12, .94);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(255, 255, 255, .06);
@@ -256,7 +257,7 @@ img { display: block; }
 /* ---------- Phones / small screens ---------- */
 @media (max-width: 720px) {
   :root { --gutter: 16px; --card: 124px; }
-  .topbar { gap: 14px; height: 56px; }
+  .topbar { gap: 14px; height: calc(56px + env(safe-area-inset-top, 0px)); }
   .logo { font-size: 22px; }
   .tabs a { padding: 8px 8px; font-size: 15px; }
   .tabs a.on::after { left: 8px; right: 8px; }
