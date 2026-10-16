@@ -318,6 +318,18 @@ function parseMovies(string $html): array {
         $director = '';
         $lead = '';
         $leadRole = '';
+        // Cast/crew are shown as photos: .../prof/<personId>-<hash>.jpg with a <label> (Director / Lead / ...)
+        foreach ($xp->query('.//img[contains(@src,"/prof/") or contains(@data-src,"/prof/")]', $card) as $pi) {
+            $src = $pi->getAttribute('src') ?: $pi->getAttribute('data-src');
+            if (!preg_match('~/prof/([A-Za-z0-9]{4,20})-~', $src, $pm)) continue;
+            $box = $pi->parentNode instanceof DOMElement && $pi->parentNode->parentNode instanceof DOMElement
+                ? $pi->parentNode->parentNode : $pi;
+            $lab = $xp->query('.//label', $box)->item(0);
+            $label = strtolower(clean($lab ? $lab->textContent : ''));
+            if (str_contains($label, 'music')) continue;
+            if (str_contains($label, 'director')) { if ($director === '') $director = $pm[1]; }
+            elseif ($lead === '') { $lead = $pm[1]; $leadRole = ''; }
+        }
         foreach ($xp->query('.//a[contains(@href,"find=Cast")]', $card) as $x) {
             parse_str((string)parse_url(absUrl($x->getAttribute('href')), PHP_URL_QUERY), $cq);
             $id = $cq['id'] ?? '';

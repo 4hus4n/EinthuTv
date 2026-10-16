@@ -164,6 +164,17 @@ class CatalogLoader(private val webView: WebView) {
                   var mi=x.href.match(/\/title\/(tt\d+)/); if(mi && !imdb) imdb=mi[1];
                 });
                 var director='', lead='', leadRole='';
+                // Cast/crew are shown as photos: .../prof/<personId>-<hash>.jpg with a <label>
+                c.querySelectorAll('img[src*="/prof/"],img[data-src*="/prof/"]').forEach(function(pi){
+                  var src=pi.getAttribute('src')||pi.getAttribute('data-src')||'';
+                  var pm=src.match(/\/prof\/([A-Za-z0-9]{4,20})-/); if(!pm) return;
+                  var box=(pi.parentElement&&pi.parentElement.parentElement)||pi;
+                  var lab=box.querySelector('label');
+                  var label=((lab&&lab.textContent)||'').toLowerCase();
+                  if(label.indexOf('music')>=0) return;
+                  if(label.indexOf('director')>=0){ if(!director) director=pm[1]; }
+                  else if(!lead){ lead=pm[1]; leadRole=''; }
+                });
                 c.querySelectorAll('a[href*="find=Cast"]').forEach(function(x){
                   try{
                     var u=new URL(x.href, location.href), id=u.searchParams.get('id')||'',
