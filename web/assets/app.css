@@ -288,3 +288,22 @@ img { display: block; }
   .hero-poster { width: 260px; }
 }
 .versions-wait-none { font-size: 14px; color: var(--muted); }
+
+/* ---------- Hero carousel ---------- */
+.hero-inner, .hero-bg { transition: opacity .26s ease; }
+.hero-inner.fading { opacity: 0; }
+.hero-bg.fading { opacity: 0; }
+.hero-eyebrow {
+  margin-bottom: 10px; font-size: 13px; font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--accent);
+}
+.hero-dots { display: flex; gap: 8px; margin-top: 22px; }
+.hero-dots .dot {
+  width: 10px; height: 10px; padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+  background: rgba(255, 255, 255, .3); transition: width .25s ease, background .25s ease;
+}
+.hero-dots .dot.on { width: 28px; background: var(--accent); }
+.hero-dots .dot:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-inner, .hero-bg, .hero-dots .dot { transition: none; }
+}

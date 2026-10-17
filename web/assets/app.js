@@ -170,20 +170,28 @@
 
   // ---------- Home ----------
 
-  function renderHome() {
-    view.textContent = '';
-    var L = cap(state.lang);
+  // ---------- Hero carousel (trending, auto-rotating) ----------
 
+  var heroTimer = null;
+  function stopHero() { if (heroTimer) { clearInterval(heroTimer); heroTimer = null; } }
+
+  function heroCarousel() {
+    stopHero();
+    var L = cap(state.lang);
     var heroBg = el('div', { class: 'hero-bg' });
     var heroPoster = el('div', { class: 'hero-poster' });
+    var eyebrow = el('div', { class: 'hero-eyebrow', text: 'Trending in ' + L });
     var heroTitle = el('h1', { text: 'Loading…' });
     var heroMeta = el('div', { class: 'meta' });
     var heroDesc = el('p');
-    var current = null;
-    var playBtn = el('button', { class: 'btn btn-primary', type: 'button', text: '▶  Play', onclick: function () { if (current) openSheet(current); } });
+    var dots = el('div', { class: 'hero-dots', role: 'tablist', 'aria-label': 'Trending movies' });
+    var inner = el('div', { class: 'hero-inner' });
+    var slides = [], idx = 0, current = null, paused = false, resumeAt = 0;
 
-    function showHero(m) {
-      if (current === m) return;
+    var playBtn = el('button', { class: 'btn btn-primary', type: 'button', text: '▶  Play',
+      onclick: function () { if (current) openSheet(current); } });
+
+    function paint(m) {
       current = m;
       heroTitle.textContent = m.title;
       heroMeta.textContent = '';
@@ -193,22 +201,87 @@
       var bg = m.poster && !/default-img/.test(m.poster) ? 'url("' + m.poster.replace(/"/g, '%22') + '")' : 'none';
       heroBg.style.backgroundImage = bg;
       heroPoster.style.backgroundImage = bg;
+      Array.prototype.forEach.call(dots.children, function (d, i) {
+        d.classList.toggle('on', i === idx);
+        d.setAttribute('aria-selected', i === idx ? 'true' : 'false');
+      });
     }
 
-    view.appendChild(el('div', { class: 'filters' }, [langSelect(renderHome), yearSelect(renderHome)]));
-    view.appendChild(el('section', { class: 'hero' }, [
-      heroBg,
-      el('div', { class: 'hero-inner' }, [
-        el('div', { class: 'hero-text' }, [
-          heroTitle, heroMeta, heroDesc,
-          el('div', { class: 'actions' }, [
-            playBtn,
-            el('a', { class: 'btn btn-outline', href: listHref(lists.year(state.lang, state.year)), text: 'See all' })
-          ])
-        ]),
-        heroPoster
-      ])
+    function go(i, instant) {
+      if (!slides.length) return;
+      idx = (i + slides.length) % slides.length;
+      var m = slides[idx];
+      if (instant) { paint(m); return; }
+      inner.classList.add('fading'); heroBg.classList.add('fading');
+      setTimeout(function () {
+        paint(m);
+        inner.classList.remove('fading'); heroBg.classList.remove('fading');
+      }, 260);
+      // Preload the next poster so the change is smooth
+      var nx = slides[(idx + 1) % slides.length];
+      if (nx && nx.poster) { var im = new Image(); im.referrerPolicy = 'no-referrer'; im.src = nx.poster; }
+    }
+
+    function tick() {
+      if (!document.body.contains(section)) { stopHero(); return; }
+      if (paused || Date.now() < resumeAt || !sheet.hidden || document.hidden) return;
+      go(idx + 1);
+    }
+    function nudge() { resumeAt = Date.now() + 8000; }
+
+    var section = el('section', { class: 'hero' }, [heroBg, inner]);
+    inner.appendChild(el('div', { class: 'hero-text' }, [
+      eyebrow, heroTitle, heroMeta, heroDesc,
+      el('div', { class: 'actions' }, [
+        playBtn,
+        el('a', { class: 'btn btn-outline', href: listHref(lists.trending(state.lang)), text: 'See all' })
+      ]),
+      dots
     ]));
+    inner.appendChild(heroPoster);
+
+    // Pause while the user is pointing at / focused in the hero
+    section.addEventListener('mouseenter', function () { paused = true; });
+    section.addEventListener('mouseleave', function () { paused = false; nudge(); });
+    section.addEventListener('focusin', function () { paused = true; });
+    section.addEventListener('focusout', function () { paused = false; nudge(); });
+
+    // Swipe on phones
+    var tx = null, ty = null;
+    section.addEventListener('touchstart', function (e) { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+    section.addEventListener('touchend', function (e) {
+      if (tx == null) return;
+      var dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+      tx = null;
+      if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.3) { go(idx + (dx < 0 ? 1 : -1)); nudge(); }
+    }, { passive: true });
+
+    api(Object.assign({ page: 1, pages: 2 }, lists.trending(state.lang))).then(function (j) {
+      slides = j.movies.filter(function (m) { return m.poster && !/default-img/.test(m.poster); }).slice(0, 8);
+      if (!slides.length) slides = j.movies.slice(0, 8);
+      if (!slides.length) { heroTitle.textContent = 'No trending movies'; return; }
+      dots.textContent = '';
+      slides.forEach(function (m, i) {
+        dots.appendChild(el('button', { class: 'dot', type: 'button', role: 'tab', 'aria-label': m.title,
+          onclick: function () { go(i); nudge(); } }));
+      });
+      go(0, true);
+      heroTimer = setInterval(tick, 6000);
+    }).catch(function () {
+      heroTitle.textContent = 'Couldn’t load trending movies';
+    });
+
+    return section;
+  }
+
+  // ---------- Home ----------
+
+  function renderHome() {
+    view.textContent = '';
+    var L = cap(state.lang);
+
+    view.appendChild(el('div', { class: 'filters' }, [langSelect(renderHome), yearSelect(renderHome)]));
+    view.appendChild(heroCarousel());
 
     var rows = [
       { title: 'New in ' + L + ' ' + state.year, p: lists.year(state.lang, state.year), pages: 3, main: true },
@@ -231,19 +304,16 @@
         api(Object.assign({ page: 1, pages: r.pages }, r.p)).then(function (j) {
           strip.textContent = '';
           if (!j.movies.length) {
-            if (r.main) { heroTitle.textContent = 'No movies found'; strip.appendChild(errorBox('No movies in this list yet.')); }
+            if (r.main) strip.appendChild(errorBox('No movies in this list yet.'));
             else sec.remove();
             return;
           }
-          j.movies.forEach(function (m) { strip.appendChild(card(m, showHero)); });
+          j.movies.forEach(function (m) { strip.appendChild(card(m)); });
           strip.appendChild(seeAllCard(listHref(r.p)));
-          if (r.main) showHero(j.movies[0]);
         }).catch(function (e) {
           strip.textContent = '';
-          if (r.main) {
-            heroTitle.textContent = 'Couldn’t load movies';
-            strip.appendChild(errorBox(e.message, run));
-          } else sec.remove();
+          if (r.main) strip.appendChild(errorBox(e.message, run));
+          else sec.remove();
         });
       }
       run();
@@ -266,6 +336,7 @@
 
     function go(n) { location.hash = '#/list?' + qs(Object.assign({}, p, { screen: n })); }
 
+    view.appendChild(heroCarousel());
     view.appendChild(el('div', { class: 'page-head' }, [
       el('h1', { text: titleFor(p) }),
       el('div', { class: 'pager' }, [prev, el('span', { text: 'Page ' + screen }), next])
@@ -298,6 +369,7 @@
   function renderBrowse() {
     view.textContent = '';
     var lang = state.lang;
+    view.appendChild(heroCarousel());
     view.appendChild(el('div', { class: 'page-head' }, [el('h1', { text: 'Browse' })]));
     view.appendChild(el('div', { class: 'filters' }, [langSelect(renderBrowse)]));
 
@@ -452,6 +524,7 @@
 
   function route() {
     closeSheet();
+    stopHero();
     var h = location.hash.replace(/^#/, '') || '/';
     var path = h.split('?')[0];
     var params = parseQs(h.split('?')[1]);
