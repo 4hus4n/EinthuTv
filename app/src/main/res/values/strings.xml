@@ -79,4 +79,6 @@
     <string name="update_now">Update now</string>
     <string name="update_later">Later</string>
     <string name="update_downloading">Downloading… %1$d%%</string>
+    <string name="login_remember">Remember my login on this TV</string>
+    <string name="login_auto">Signing you back in…</string>
 </resources>

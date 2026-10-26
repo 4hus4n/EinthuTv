@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.webkit.WebView
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -266,22 +267,38 @@ class HomeActivity : Activity() {
     private fun checkLogin() {
         auth.check { loggedIn ->
             if (isFinishing || isDestroyed) return@check
-            if (loggedIn == false && !loginAskedThisRun) showLoginDialog()
+            if (loggedIn != false || loginAskedThisRun) return@check
+            loginAskedThisRun = true
+            val saved = CredentialStore.load(this)
+            if (saved == null) { showLoginDialog(); return@check }
+            // Signed out but we have the saved login: sign back in quietly
+            Toast.makeText(this, R.string.login_auto, Toast.LENGTH_SHORT).show()
+            auth.login(saved.email, saved.password) { r ->
+                if (isFinishing || isDestroyed) return@login
+                when (r) {
+                    is AuthHelper.Result.Success -> Toast.makeText(this, R.string.login_done, Toast.LENGTH_SHORT).show()
+                    is AuthHelper.Result.Failed -> showLoginDialog(r.message)
+                    is AuthHelper.Result.Unknown -> showLoginDialog(getString(R.string.login_unknown))
+                }
+            }
         }
     }
 
-    private fun showLoginDialog() {
+    private fun showLoginDialog(initialMessage: String? = null) {
         loginAskedThisRun = true
         val view = LayoutInflater.from(this).inflate(R.layout.dialog_login, null)
         val email = view.findViewById<EditText>(R.id.loginEmail)
         val pass = view.findViewById<EditText>(R.id.loginPassword)
+        val remember = view.findViewById<CheckBox>(R.id.loginRemember)
         val msg = view.findViewById<TextView>(R.id.loginStatus)
         val btnLogin = view.findViewById<Button>(R.id.btnLogin)
         val btnSkip = view.findViewById<Button>(R.id.btnSkip)
         val btnSite = view.findViewById<Button>(R.id.btnSiteLogin)
 
-        val prefs = getSharedPreferences("einthutv", MODE_PRIVATE)
-        email.setText(prefs.getString("email", ""))
+        // Fill in whatever was saved last time
+        val saved = CredentialStore.load(this)
+        email.setText(saved?.email ?: CredentialStore.savedEmail(this))
+        if (saved != null) pass.setText(saved.password)
 
         val dialog = Dialog(this, android.R.style.Theme_Material_Dialog_NoActionBar)
         dialog.setContentView(view)
@@ -300,12 +317,12 @@ class HomeActivity : Activity() {
             msg.setTextColor(if (isError) 0xFFFFB3B3.toInt() else 0xFFB3FFC8.toInt())
             msg.text = text
         }
+        if (initialMessage != null) show(initialMessage)
 
         fun submit() {
             val e = email.text.toString().trim()
             val p = pass.text.toString()
             if (e.isEmpty() || p.isEmpty()) { show(getString(R.string.login_missing)); return }
-            prefs.edit().putString("email", e).apply()
             setBusy(true)
             show(getString(R.string.login_signing_in), isError = false)
             auth.login(e, p) { r ->
@@ -313,12 +330,16 @@ class HomeActivity : Activity() {
                 setBusy(false)
                 when (r) {
                     is AuthHelper.Result.Success -> {
+                        if (remember.isChecked) CredentialStore.save(this, e, p)
+                        else { CredentialStore.save(this, e, ""); CredentialStore.forgetPassword(this) }
                         dialog.dismiss()
                         Toast.makeText(this, R.string.login_done, Toast.LENGTH_SHORT).show()
                         btnPlay.requestFocus()
                     }
                     is AuthHelper.Result.Failed -> { show(r.message); pass.requestFocus() }
                     is AuthHelper.Result.Unknown -> {
+                        // The details may still be right; keep them if asked so the next try is automatic
+                        if (remember.isChecked) CredentialStore.save(this, e, p)
                         show(getString(R.string.login_unknown))
                         btnSite.visibility = View.VISIBLE
                     }
@@ -337,7 +358,11 @@ class HomeActivity : Activity() {
         }
         dialog.setOnCancelListener { auth.cancel() }
         dialog.show()
-        (if (email.text.isNullOrBlank()) email else pass).requestFocus()
+        when {
+            email.text.isNullOrBlank() -> email.requestFocus()
+            pass.text.isNullOrBlank() -> pass.requestFocus()
+            else -> btnLogin.requestFocus()
+        }
     }
 
     // ---------- Updates ----------

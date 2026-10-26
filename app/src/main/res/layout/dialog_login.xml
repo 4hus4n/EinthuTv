@@ -39,6 +39,19 @@
         android:imeOptions="actionDone"
         android:inputType="textPassword" />
 
+    <CheckBox
+        android:id="@+id/loginRemember"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginTop="10dp"
+        android:buttonTint="@color/accent"
+        android:checked="true"
+        android:focusable="true"
+        android:paddingStart="8dp"
+        android:text="@string/login_remember"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp" />
+
     <TextView
         android:id="@+id/loginStatus"
         android:layout_width="match_parent"
