@@ -38,6 +38,66 @@ if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0755, true);
 $lang = strtolower($_GET['lang'] ?? 'malayalam');
 if (!in_array($lang, $LANGS, true)) fail('Unknown language');
 
+// ---------- Diagnostics: what a signed-out einthusan.tv page contains ----------
+// api.php?action=pageinfo  (fixed URLs only; used to tune the TV app's sign-in check)
+
+if (($_GET['action'] ?? '') === 'pageinfo') {
+    $pages = [SITE . '/', SITE . '/account/', SITE . '/login/'];
+    $report = [];
+    foreach ($pages as $u) {
+        $cookies = [];
+        $ch = curl_init($u);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_ENCODING => '',
+            CURLOPT_USERAGENT => UA,
+            CURLOPT_HEADERFUNCTION => function ($c, $h) use (&$cookies) {
+                if (stripos($h, 'set-cookie:') === 0) $cookies[] = trim(explode('=', substr($h, 11), 2)[0]);
+                return strlen($h);
+            },
+        ]);
+        $html = (string)curl_exec($ch);
+        $info = ['url' => $u, 'code' => curl_getinfo($ch, CURLINFO_HTTP_CODE),
+                 'finalUrl' => curl_getinfo($ch, CURLINFO_EFFECTIVE_URL), 'bytes' => strlen($html), 'cookies' => $cookies];
+        curl_close($ch);
+
+        if ($html !== '') {
+            [$doc, $xp] = loadDoc($html);
+            $attrs = fn(DOMElement $e, array $names) => array_filter(array_combine($names, array_map(fn($n) => mb_substr($e->getAttribute($n), 0, 120), $names)), 'strlen');
+            $info['forms'] = [];
+            foreach ($xp->query('//form') as $f) $info['forms'][] = $attrs($f, ['id', 'class', 'action', 'method']);
+            $info['inputs'] = [];
+            foreach ($xp->query('//input|//textarea') as $i) {
+                if (count($info['inputs']) >= 40) break;
+                $info['inputs'][] = $attrs($i, ['type', 'name', 'id', 'class', 'placeholder']);
+            }
+            $info['authish'] = [];
+            foreach ($xp->query('//a|//button|//*[@onclick]|//label|//li|//span|//div') as $e) {
+                if (count($info['authish']) >= 50) break;
+                $t = clean($e->textContent);
+                $meta = $e->getAttribute('href') . ' ' . $e->getAttribute('id') . ' ' . $e->getAttribute('class') . ' ' . $e->getAttribute('onclick');
+                $hit = preg_match('/log ?in|sign ?in|log ?out|sign ?out|my account|premium|register|password/i', $meta)
+                    || (mb_strlen($t) <= 40 && preg_match('/^(log ?in|sign ?in|log ?out|sign ?out|login|logout|account|my account|register|sign up|premium)$/i', $t));
+                if (!$hit) continue;
+                $info['authish'][] = ['tag' => $e->nodeName, 'text' => mb_substr($t, 0, 60)] + $attrs($e, ['href', 'id', 'class', 'onclick']);
+            }
+            $info['scripts'] = [];
+            foreach ($xp->query('//script') as $s) {
+                $src = $s->getAttribute('src');
+                if ($src !== '') { $info['scripts'][] = $src; continue; }
+                $code = $s->textContent;
+                if (preg_match('/login|logged|user|session/i', $code)) $info['scripts'][] = 'inline: ' . mb_substr(clean($code), 0, 300);
+            }
+        }
+        $report[] = $info;
+    }
+    out(['pages' => $report]);
+}
+
 // ---------- Other-language versions of one film ----------
 
 if (($_GET['action'] ?? '') === 'versions') {
