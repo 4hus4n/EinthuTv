@@ -30,6 +30,10 @@ class AuthHelper(private val web: WebView) {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setup() {
+        // Hidden helper view: never let the remote focus land on it
+        web.isFocusable = false
+        web.isFocusableInTouchMode = false
+        web.descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
         web.settings.apply {

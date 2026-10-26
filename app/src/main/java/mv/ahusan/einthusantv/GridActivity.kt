@@ -53,6 +53,7 @@ class GridActivity : Activity() {
         findViewById<TextView>(R.id.gridTitle).text = intent.getStringExtra(EXTRA_TITLE) ?: Nav.titleFor(baseUrl)
         findViewById<Button>(R.id.btnHome).setOnClickListener { Nav.goHome(this) }
         findViewById<Button>(R.id.btnBrowse).setOnClickListener { Nav.openBrowse(this) }
+        Nav.stopUp(findViewById(R.id.btnHome), findViewById(R.id.btnBrowse))
         btnPrev.setOnClickListener { if (page > 1) { page--; loadPage() } }
         btnNext.setOnClickListener { page++; loadPage() }
         status.setOnClickListener { loadPage() }

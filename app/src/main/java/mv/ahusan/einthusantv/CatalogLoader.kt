@@ -29,6 +29,10 @@ class CatalogLoader(private val webView: WebView) {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setup() {
+        // Hidden helper view: never let the remote focus land on it
+        webView.isFocusable = false
+        webView.isFocusableInTouchMode = false
+        webView.descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true

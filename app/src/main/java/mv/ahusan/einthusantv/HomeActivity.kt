@@ -108,6 +108,11 @@ class HomeActivity : Activity() {
         findViewById<Button>(R.id.tabUpdate).setOnClickListener { checkForUpdates() }
         findViewById<Button>(R.id.tabAccount).setOnClickListener { Nav.openWatch(this, "https://einthusan.tv/account/") }
 
+        Nav.stopUp(
+            findViewById(R.id.tabHome), findViewById(R.id.tabMovies), findViewById(R.id.tabBrowse),
+            findViewById(R.id.tabUpdate), findViewById(R.id.tabAccount)
+        )
+
         btnLang.setOnClickListener { pickLanguage() }
         btnYear.setOnClickListener { pickYear() }
         btnPlay.setOnClickListener { heroMovie?.let { Nav.openMovie(this, it, lang) } }
@@ -163,9 +168,9 @@ class HomeActivity : Activity() {
         // Hero slides come from the first page of trending, loaded first
         loader.load(Nav.withPage(Nav.trendingUrl(lang), 1)) { movies -> addSlides(movies) }
 
+        addRow(getString(R.string.row_recent), Nav.recentUrl(lang), pages = 2, isMain = false)
         addRow(getString(R.string.row_new, label, year.toString()), Nav.yearUrl(lang, year), pages = 3, isMain = true)
         addRow(getString(R.string.row_trending, label), Nav.trendingUrl(lang), pages = 2, isMain = false, feedsHero = true)
-        addRow(getString(R.string.row_recent), Nav.recentUrl(lang), pages = 2, isMain = false)
         addRow(getString(R.string.row_staff), Nav.staffPicksUrl(lang), pages = 1, isMain = false)
     }
 

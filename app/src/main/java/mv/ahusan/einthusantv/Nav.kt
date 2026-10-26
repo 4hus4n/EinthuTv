@@ -15,6 +15,11 @@ object Nav {
 
     const val BASE = "https://einthusan.tv/movie/results/"
 
+    /** Stops the remote's UP key at the top bar (nothing above it to move to). */
+    fun stopUp(vararg views: View) {
+        views.forEach { v -> v.nextFocusUpId = v.id }
+    }
+
     fun langLabel(lang: String) = lang.replaceFirstChar { it.uppercase() }
 
     fun resultsUrl(lang: String, vararg params: Pair<String, String>): String {
