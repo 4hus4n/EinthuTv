@@ -359,7 +359,7 @@ class HomeActivity : Activity() {
         btnSkip.setOnClickListener { auth.cancel(); dialog.dismiss(); btnPlay.requestFocus() }
         btnSite.setOnClickListener {
             auth.cancel(); dialog.dismiss()
-            Nav.openWatch(this, "https://einthusan.tv/account/")
+            Nav.openWatch(this, "https://einthusan.tv/login/")
         }
         dialog.setOnCancelListener { auth.cancel() }
         dialog.show()
