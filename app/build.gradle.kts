@@ -3,6 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Version = GitHub Actions run number, so it matches the release tag v1.0.<run>
+val runNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+
 android {
     namespace = "mv.ahusan.einthusantv"
     compileSdk = 34
@@ -11,15 +14,24 @@ android {
         applicationId = "mv.ahusan.einthusantv"
         minSdk = 24
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = runNumber
+        versionName = "1.0.$runNumber"
+    }
+
+    // One fixed key for every build, so new versions install over old ones (in-app updates)
+    signingConfigs {
+        create("release") {
+            storeFile = file("einthutv-release.jks")
+            storePassword = "einthutv"
+            keyAlias = "einthutv"
+            keyPassword = "einthutv"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the APK installs directly
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -34,4 +46,5 @@ android {
 
 dependencies {
     implementation("org.jsoup:jsoup:1.17.2")
+    implementation("androidx.core:core:1.12.0")
 }

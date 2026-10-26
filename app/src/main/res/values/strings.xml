@@ -57,4 +57,26 @@
     <string name="versions_checking">Checking other languages…</string>
     <string name="versions_none">Only in %1$s</string>
     <string name="versions_failed">Couldn\'t check other languages</string>
+    <string name="tab_update">⟳  Update</string>
+    <string name="login_title">Sign in to Einthusan</string>
+    <string name="login_sub">Sign in with your Einthusan account to watch with Premium. You can also skip and watch without signing in.</string>
+    <string name="login_email">Email</string>
+    <string name="login_password">Password</string>
+    <string name="login_button">Log in</string>
+    <string name="login_busy">Signing in…</string>
+    <string name="login_skip">Skip for now</string>
+    <string name="login_site">Open login page</string>
+    <string name="login_missing">Enter your email and password.</string>
+    <string name="login_signing_in">Signing in on einthusan.tv…</string>
+    <string name="login_done">Signed in</string>
+    <string name="login_unknown">Couldn\'t confirm the sign-in. Try the Einthusan login page instead.</string>
+    <string name="update_title">Updates</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_latest">You have the latest version (%1$s).</string>
+    <string name="update_failed">Couldn\'t update: %1$s</string>
+    <string name="update_available">Update available</string>
+    <string name="update_message">EinthuTv %1$s is available. You have %2$s.\n\nDownload and install it now?</string>
+    <string name="update_now">Update now</string>
+    <string name="update_later">Later</string>
+    <string name="update_downloading">Downloading… %1$d%%</string>
 </resources>
