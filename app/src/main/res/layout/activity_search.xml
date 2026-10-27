@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="40dp">
+
+        <!-- Top bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="@color/bar"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="40dp"
+            android:paddingEnd="40dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="24dp"
+                android:fontFamily="sans-serif-condensed"
+                android:letterSpacing="0.04"
+                android:text="@string/logo"
+                android:textColor="@color/accent"
+                android:textSize="30sp"
+                android:textStyle="bold" />
+
+            <Button android:id="@+id/btnHome" style="@style/TopTab" android:text="@string/home_button" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="40dp"
+            android:layout_marginTop="22dp"
+            android:text="@string/search_title"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="40dp"
+            android:paddingEnd="40dp">
+
+            <EditText
+                android:id="@+id/searchInput"
+                style="@style/TvInput"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:hint="@string/search_hint"
+                android:imeOptions="actionSearch"
+                android:inputType="text" />
+
+            <Button
+                android:id="@+id/btnSearch"
+                style="@style/PrimaryButton"
+                android:layout_height="56dp"
+                android:layout_marginStart="14dp"
+                android:layout_marginEnd="0dp"
+                android:text="@string/search_button" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/searchStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="40dp"
+            android:layout_marginTop="14dp"
+            android:textColor="#B3FFFFFF"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/searchRows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </LinearLayout>
+</ScrollView>

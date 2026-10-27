@@ -56,6 +56,7 @@
                     android:textColor="#FFFFFF" />
                 <Button android:id="@+id/tabMovies" style="@style/TopTab" android:text="@string/tab_movies" />
                 <Button android:id="@+id/tabBrowse" style="@style/TopTab" android:text="@string/tab_browse" />
+                <Button android:id="@+id/tabSearch" style="@style/TopTab" android:text="@string/tab_search" />
 
                 <View
                     android:layout_width="0dp"

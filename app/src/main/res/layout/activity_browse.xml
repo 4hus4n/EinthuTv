@@ -33,6 +33,7 @@
                 android:textStyle="bold" />
 
             <Button android:id="@+id/btnHome" style="@style/TopTab" android:text="@string/home_button" />
+            <Button android:id="@+id/btnSearch" style="@style/TopTab" android:text="@string/tab_search" />
         </LinearLayout>
 
         <LinearLayout

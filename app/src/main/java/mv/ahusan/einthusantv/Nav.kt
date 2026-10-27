@@ -93,6 +93,10 @@ object Nav {
         )
     }
 
+    fun openSearch(ctx: Context) {
+        ctx.startActivity(Intent(ctx, SearchActivity::class.java))
+    }
+
     fun openBrowse(ctx: Context) {
         ctx.startActivity(Intent(ctx, BrowseActivity::class.java))
     }

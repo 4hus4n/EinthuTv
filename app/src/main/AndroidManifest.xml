@@ -39,6 +39,12 @@
             android:screenOrientation="landscape" />
 
         <activity
+            android:name=".SearchActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:windowSoftInputMode="stateVisible|adjustPan" />
+
+        <activity
             android:name=".BrowseActivity"
             android:exported="false"
             android:screenOrientation="landscape" />

@@ -88,4 +88,15 @@
     <string name="continue_remove_title">Remove from Continue Watching?</string>
     <string name="continue_remove">Remove</string>
     <string name="continue_hint">Hold OK on a movie to remove it</string>
+    <string name="tab_search">🔍  Search</string>
+    <string name="search_title">Search all languages</string>
+    <string name="search_hint">Movie name…</string>
+    <string name="search_button">Search</string>
+    <string name="search_too_short">Type at least 2 letters.</string>
+    <string name="search_running">Searching all languages for “%1$s”…</string>
+    <string name="search_progress">%1$d found so far for “%2$s”…</string>
+    <string name="search_done">%1$d movies found for “%2$s”</string>
+    <string name="search_none">No movies found for “%1$s”. Try a shorter name or different spelling.</string>
+    <string name="search_failed">Couldn\'t reach einthusan.tv. Check the internet and try again.</string>
+    <string name="search_row">%1$s · %2$d</string>
 </resources>

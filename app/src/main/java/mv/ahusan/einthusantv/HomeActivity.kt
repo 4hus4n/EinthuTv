@@ -109,11 +109,12 @@ class HomeActivity : Activity() {
         findViewById<Button>(R.id.tabHome).setOnClickListener { reload() }
         findViewById<Button>(R.id.tabMovies).setOnClickListener { Nav.openGrid(this, Nav.yearUrl(lang, year)) }
         findViewById<Button>(R.id.tabBrowse).setOnClickListener { Nav.openBrowse(this) }
+        findViewById<Button>(R.id.tabSearch).setOnClickListener { Nav.openSearch(this) }
         findViewById<Button>(R.id.tabUpdate).setOnClickListener { checkForUpdates() }
         findViewById<Button>(R.id.tabAccount).setOnClickListener { Nav.openWatch(this, "https://einthusan.tv/account/") }
 
         Nav.stopUp(
-            findViewById(R.id.tabHome), findViewById(R.id.tabMovies), findViewById(R.id.tabBrowse),
+            findViewById(R.id.tabHome), findViewById(R.id.tabMovies), findViewById(R.id.tabBrowse), findViewById(R.id.tabSearch),
             findViewById(R.id.tabUpdate), findViewById(R.id.tabAccount)
         )
 

@@ -31,7 +31,8 @@ class BrowseActivity : Activity() {
         btnLang = findViewById(R.id.btnLang)
 
         findViewById<Button>(R.id.btnHome).setOnClickListener { Nav.goHome(this) }
-        Nav.stopUp(findViewById(R.id.btnHome))
+        findViewById<Button>(R.id.btnSearch).setOnClickListener { Nav.openSearch(this) }
+        Nav.stopUp(findViewById(R.id.btnHome), findViewById(R.id.btnSearch))
         btnLang.setOnClickListener { pickLanguage() }
 
         build()
