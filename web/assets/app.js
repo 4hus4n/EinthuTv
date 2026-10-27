@@ -17,6 +17,7 @@
 
   function load(k, d) { try { return localStorage.getItem('einthutv.' + k) || d; } catch (e) { return d; } }
   function save(k, v) { try { localStorage.setItem('einthutv.' + k, v); } catch (e) {} }
+  function langOf(m) { return (m && m.lang) || state.lang; }
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
   function el(tag, attrs, kids) {
@@ -119,7 +120,7 @@
     var c = el('button', { class: 'card', type: 'button', onclick: function () { openSheet(m); } }, [
       posterEl(m),
       el('h3', { text: m.title }),
-      el('div', { class: 'sub', text: [m.year, cap(state.lang)].filter(Boolean).join('  •  ') }),
+      el('div', { class: 'sub', text: [m.year, cap(langOf(m))].filter(Boolean).join('  •  ') }),
       badges(m)
     ]);
     if (onFocus) {
@@ -407,6 +408,51 @@
     ]);
   }
 
+  // ---------- Search (all languages) ----------
+
+  function renderSearch(q) {
+    view.textContent = '';
+    q = (q || '').trim();
+    var input = el('input', { type: 'search', class: 'search-input', placeholder: 'Movie name…',
+      value: q, 'aria-label': 'Search movies', autocomplete: 'off', enterkeyhint: 'search' });
+    var form = el('form', { class: 'search-form', role: 'search', onsubmit: function (e) {
+      e.preventDefault();
+      var v = input.value.trim();
+      if (v.length < 2) { status.textContent = 'Type at least 2 letters.'; return; }
+      location.hash = '#/search?' + qs({ q: v });
+    } }, [input, el('button', { class: 'btn btn-primary', type: 'submit', text: 'Search' })]);
+    var status = el('div', { class: 'search-status' });
+    var results = el('div');
+
+    view.appendChild(el('div', { class: 'page-head' }, [el('h1', { text: 'Search all languages' })]));
+    view.appendChild(form);
+    view.appendChild(status);
+    view.appendChild(results);
+
+    if (q.length < 2) { setTimeout(function () { input.focus(); }, 50); return; }
+
+    status.textContent = 'Searching all languages for “' + q + '”…';
+    api({ action: 'search', q: q, lang: state.lang }).then(function (j) {
+      var total = 0;
+      j.groups.forEach(function (g) {
+        if (!g.movies.length) return;
+        total += g.movies.length;
+        var strip = el('div', { class: 'strip' });
+        g.movies.forEach(function (m) { m.lang = g.lang; strip.appendChild(card(m)); });
+        results.appendChild(el('section', { class: 'row' }, [
+          el('div', { class: 'row-head' }, [el('h2', { text: cap(g.lang) + ' · ' + g.movies.length })]),
+          strip
+        ]));
+      });
+      status.textContent = total
+        ? total + ' movies found for “' + q + '”'
+        : 'No movies found for “' + q + '”. Try a shorter name or different spelling.';
+    }).catch(function (e) {
+      status.textContent = '';
+      results.appendChild(errorBox(e.message, function () { renderSearch(q); }));
+    });
+  }
+
   // ---------- Movie sheet ----------
 
   var sheet = document.getElementById('sheet');
@@ -418,13 +464,13 @@
     img.hidden = !(m.poster && !/default-img/.test(m.poster));
     if (!img.hidden) img.src = m.poster;
     document.getElementById('sheetTitle').textContent = m.title;
-    document.getElementById('sheetMeta').textContent = [m.year, cap(state.lang)].filter(Boolean).join('  •  ');
+    document.getElementById('sheetMeta').textContent = [m.year, cap(langOf(m))].filter(Boolean).join('  •  ');
     var b = document.getElementById('sheetBadges');
     b.textContent = ''; b.appendChild(badges(m));
     document.getElementById('sheetDesc').textContent = m.synopsis || '';
     var w = document.getElementById('sheetWatch');
     w.href = m.url;
-    w.textContent = '▶  Watch in ' + cap(state.lang);
+    w.textContent = '▶  Watch in ' + cap(langOf(m));
     sheet.hidden = false;
     document.body.style.overflow = 'hidden';
     w.focus();
@@ -445,13 +491,13 @@
     box.parentNode.hidden = false;
     box.appendChild(el('span', { class: 'versions-wait', text: 'Checking other languages…' }));
     api({
-      action: 'versions', lang: state.lang, url: m.url, year: m.year, imdb: m.imdb,
+      action: 'versions', lang: langOf(m), url: m.url, year: m.year, imdb: m.imdb,
       director: m.director, lead: m.lead, leadRole: m.leadRole
     }).then(function (j) {
       if (token !== versionsToken) return;
       box.textContent = '';
       if (!j.versions.length) {
-        box.appendChild(el('span', { class: 'versions-wait-none', text: 'Only in ' + cap(state.lang) }));
+        box.appendChild(el('span', { class: 'versions-wait-none', text: 'Only in ' + cap(langOf(m)) }));
         return;
       }
       j.versions.forEach(function (v) {
@@ -534,6 +580,7 @@
     if (path === '/movies') { tab = 'movies'; renderList(lists.year(state.lang, state.year)); }
     else if (path === '/list') { tab = 'movies'; renderList(params); }
     else if (path === '/browse') { tab = 'browse'; renderBrowse(); }
+    else if (path === '/search') { tab = 'search'; renderSearch(params.q); }
     else renderHome();
 
     document.querySelectorAll('.tabs a').forEach(function (a) { a.classList.toggle('on', a.getAttribute('data-tab') === tab); });

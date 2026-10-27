@@ -307,3 +307,26 @@ img { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .hero-inner, .hero-bg, .hero-dots .dot { transition: none; }
 }
+
+/* ---------- Search ---------- */
+.tabs a { display: inline-flex; align-items: center; gap: 6px; }
+.tab-icon { width: 18px; height: 18px; }
+.search-form { display: flex; gap: 12px; padding: 8px var(--gutter) 0; }
+.search-input {
+  flex: 1; min-width: 0; height: 50px; padding: 0 18px; border-radius: 10px;
+  background: rgba(255, 255, 255, .06); border: 1px solid var(--line); color: #fff; font-size: 17px;
+}
+.search-input::placeholder { color: rgba(255, 255, 255, .45); }
+.search-input:focus { outline: none; border-color: #fff; background: rgba(255, 255, 255, .1); }
+.search-status { padding: 14px var(--gutter) 0; color: var(--muted); font-size: 15px; }
+@media (max-width: 720px) {
+  .tab-label { display: none; }
+  .search-form .btn { padding: 0 16px; }
+}
+@media (max-width: 720px) {
+  .topbar { gap: 10px; }
+  .logo { font-size: 20px; }
+  .tabs { gap: 0; }
+  .tabs a { padding: 8px 7px; }
+  .tabs a.on::after { left: 7px; right: 7px; }
+}

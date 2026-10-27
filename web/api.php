@@ -98,6 +98,39 @@ if (($_GET['action'] ?? '') === 'pageinfo') {
     out(['pages' => $report]);
 }
 
+// ---------- Search every language ----------
+// api.php?action=search&q=<name>
+
+if (($_GET['action'] ?? '') === 'search') {
+    $q = trim((string)($_GET['q'] ?? ''));
+    $q = preg_replace('/\s+/u', ' ', $q);
+    if (mb_strlen($q) < 2 || mb_strlen($q) > 60) fail('Type 2 to 60 letters');
+
+    $urls = [];
+    foreach ($LANGS as $L) $urls[$L] = SITE . '/movie/results/?' . http_build_query(['lang' => $L, 'query' => $q]);
+    $htmls = fetchAll(array_values($urls));
+
+    $norm = fn($s) => trim(preg_replace('/[^\p{L}\p{N}]+/u', ' ', mb_strtolower($s)));
+    $words = array_filter(explode(' ', $norm($q)), fn($w) => mb_strlen($w) >= 2);
+
+    $groups = [];
+    $failed = 0;
+    foreach ($urls as $L => $u) {
+        $html = $htmls[$u] ?? null;
+        if ($html === null) { $failed++; continue; }
+        $movies = parseMovies($html);
+        // If no title relates to the search, the site didn't treat it as a search: show nothing
+        $related = !$words;
+        foreach ($movies as $m) {
+            $t = $norm($m['title']);
+            foreach ($words as $w) if (str_contains($t, $w)) { $related = true; break 2; }
+        }
+        $groups[] = ['lang' => $L, 'movies' => $related ? $movies : []];
+    }
+    if ($failed === count($urls)) fail('Could not reach einthusan.tv from this server', 502);
+    out(['q' => $q, 'groups' => $groups]);
+}
+
 // ---------- Other-language versions of one film ----------
 
 if (($_GET['action'] ?? '') === 'versions') {
