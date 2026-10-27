@@ -81,4 +81,11 @@
     <string name="update_downloading">Downloading… %1$d%%</string>
     <string name="login_remember">Remember my login on this TV</string>
     <string name="login_auto">Signing you back in…</string>
+    <string name="row_continue">Continue Watching</string>
+    <string name="resume_from">▶  Resume from %1$s</string>
+    <string name="resuming_at">Resuming at %1$s</string>
+    <string name="start_over">↺  Start over</string>
+    <string name="continue_remove_title">Remove from Continue Watching?</string>
+    <string name="continue_remove">Remove</string>
+    <string name="continue_hint">Hold OK on a movie to remove it</string>
 </resources>

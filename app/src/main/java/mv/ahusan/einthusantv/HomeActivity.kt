@@ -46,6 +46,7 @@ class HomeActivity : Activity() {
     private lateinit var btnYear: Button
     private lateinit var rows: LinearLayout
     private lateinit var status: TextView
+    private lateinit var continueBox: LinearLayout
 
     private lateinit var heroBg: ImageView
     private lateinit var heroPoster: ImageView
@@ -90,6 +91,9 @@ class HomeActivity : Activity() {
         btnYear = findViewById(R.id.btnYear)
         rows = findViewById(R.id.rows)
         status = findViewById(R.id.status)
+        // "Continue Watching" sits above the other rows and is rebuilt whenever Home is shown
+        continueBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        (rows.parent as ViewGroup).addView(continueBox, (rows.parent as ViewGroup).indexOfChild(rows))
         heroBg = findViewById(R.id.heroBg)
         heroPoster = findViewById(R.id.heroPoster)
         heroText = findViewById(R.id.heroText)
@@ -127,6 +131,7 @@ class HomeActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        buildContinueRow()
         // Language may have been changed on the Browse screen
         val saved = getSharedPreferences("einthutv", MODE_PRIVATE).getString("lang", lang) ?: lang
         if (saved != lang) { lang = saved; reload() }
@@ -203,6 +208,53 @@ class HomeActivity : Activity() {
                 }
             }
         }
+    }
+
+    // ---------- Continue Watching ----------
+
+    private fun buildContinueRow() {
+        continueBox.removeAllViews()
+        val items = WatchHistory.all(this)
+        if (items.isEmpty()) return
+        val section = LayoutInflater.from(this).inflate(R.layout.row_section, continueBox, false)
+        section.findViewById<TextView>(R.id.rowTitle).text = getString(R.string.row_continue)
+        val strip = section.findViewById<LinearLayout>(R.id.rowItems)
+        items.forEach { e -> strip.addView(continueCard(strip, e)) }
+        continueBox.addView(section)
+    }
+
+    private fun continueCard(parent: ViewGroup, e: WatchHistory.Entry): View {
+        val v = LayoutInflater.from(this).inflate(R.layout.item_continue, parent, false)
+        v.findViewById<TextView>(R.id.cardTitle).text = e.title
+        v.findViewById<TextView>(R.id.cardMeta).text = WatchHistory.fmtLeft(e.left)
+        v.findViewById<ProgressBar>(R.id.cardProgress).progress = (e.fraction * 1000).toInt()
+        ImageLoader.load(e.poster, v.findViewById<ImageView>(R.id.cardPoster))
+        v.setOnClickListener {
+            startActivity(
+                android.content.Intent(this, BrowserActivity::class.java)
+                    .putExtra(BrowserActivity.EXTRA_URL, e.url)
+                    .putExtra(BrowserActivity.EXTRA_TITLE, e.title)
+                    .putExtra(BrowserActivity.EXTRA_POSTER, e.poster)
+                    .putExtra(BrowserActivity.EXTRA_DESC, e.desc)
+                    .putExtra(BrowserActivity.EXTRA_META, e.meta)
+                    .putExtra(BrowserActivity.EXTRA_RESUME_AT, e.position)
+            )
+        }
+        v.setOnLongClickListener {
+            AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle(R.string.continue_remove_title)
+                .setMessage(e.title)
+                .setPositiveButton(R.string.continue_remove) { _, _ ->
+                    WatchHistory.remove(this, e.url)
+                    buildContinueRow()
+                    btnPlay.requestFocus()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            true
+        }
+        Nav.focusScale(v)
+        return v
     }
 
     // ---------- Hero slides ----------

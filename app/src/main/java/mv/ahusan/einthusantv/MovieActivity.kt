@@ -39,8 +39,17 @@ class MovieActivity : Activity() {
         ImageLoader.load(movie.poster, findViewById<ImageView>(R.id.movieBg))
 
         val watch = findViewById<Button>(R.id.btnWatch)
-        watch.text = getString(R.string.watch_in, Nav.langLabel(lang))
-        watch.setOnClickListener { play(movie.url, movie.title, movie.poster, lang) }
+        val startOver = findViewById<Button>(R.id.btnStartOver)
+        val saved = WatchHistory.get(this, movie.url)
+        if (saved != null && saved.position >= 30) {
+            watch.text = getString(R.string.resume_from, WatchHistory.fmtClock(saved.position))
+            watch.setOnClickListener { play(movie.url, movie.title, movie.poster, lang, saved.position) }
+            startOver.visibility = View.VISIBLE
+            startOver.setOnClickListener { play(movie.url, movie.title, movie.poster, lang, 0L) }
+        } else {
+            watch.text = getString(R.string.watch_in, Nav.langLabel(lang))
+            watch.setOnClickListener { play(movie.url, movie.title, movie.poster, lang, 0L) }
+        }
         findViewById<Button>(R.id.btnHome).setOnClickListener { Nav.goHome(this) }
         watch.requestFocus()
 
@@ -77,9 +86,10 @@ class MovieActivity : Activity() {
         return b
     }
 
-    private fun play(url: String, title: String, poster: String, l: String) {
+    private fun play(url: String, title: String, poster: String, l: String, resumeAt: Long = -1L) {
         startActivity(
             Intent(this, BrowserActivity::class.java)
+                .putExtra(BrowserActivity.EXTRA_RESUME_AT, resumeAt)
                 .putExtra(BrowserActivity.EXTRA_URL, url)
                 .putExtra(BrowserActivity.EXTRA_TITLE, title)
                 .putExtra(BrowserActivity.EXTRA_POSTER, poster)

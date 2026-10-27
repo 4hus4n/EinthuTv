@@ -37,6 +37,8 @@ class BrowserActivity : Activity() {
         const val EXTRA_POSTER = "poster"
         const val EXTRA_DESC = "desc"
         const val EXTRA_META = "meta"
+        /** Seconds to resume at; 0 = start over; missing = use saved progress. */
+        const val EXTRA_RESUME_AT = "resume_at"
         private const val HOME = "https://einthusan.tv/"
         private const val POINTER_STEP = 28f
 
@@ -162,7 +164,8 @@ class BrowserActivity : Activity() {
                   var v = cur || main();
                   if (v && isFinite(v.duration)) v.currentTime = Math.max(0, Math.min(v.duration - 1, v.currentTime + s));
                 },
-                exit: exit
+                exit: exit,
+                seekTo: function(s){ var v = cur || main(); if (v) { try { v.currentTime = s; } catch(e) {} } }
               };
             })();
         """.trimIndent()
@@ -201,6 +204,14 @@ class BrowserActivity : Activity() {
     private var py = 0f
     private var lastBackPress = 0L
     private var movieTitle: String? = null
+
+    // Continue Watching
+    private var startUrl = ""
+    private var resumeAt = -1L
+    private var resumeApplied = false
+    private var lastPos = 0.0
+    private var lastDur = 0.0
+    private var lastSavedAt = 0L
 
     private val hintHandler = Handler(Looper.getMainLooper())
     private val overlayHandler = Handler(Looper.getMainLooper())
@@ -245,6 +256,9 @@ class BrowserActivity : Activity() {
 
         // Movie info passed from the app's cards
         movieTitle = intent.getStringExtra(EXTRA_TITLE)
+        startUrl = intent.getStringExtra(EXTRA_URL) ?: ""
+        resumeAt = intent.getLongExtra(EXTRA_RESUME_AT, -1L)
+        if (resumeAt < 0) resumeAt = WatchHistory.get(this, startUrl)?.position ?: 0L
         loadTitle.text = movieTitle ?: ""
         loadMeta.text = intent.getStringExtra(EXTRA_META) ?: ""
         loadDesc.text = intent.getStringExtra(EXTRA_DESC) ?: ""
@@ -433,6 +447,7 @@ class BrowserActivity : Activity() {
             playerTitle.text = movieTitle ?: cleanTitle(webView.title)
             showOverlay()
             pollHandler.post(pollTask)
+            applyResume()
         } else {
             playerBar.visibility = View.GONE
             seekFlash.visibility = View.GONE
@@ -465,11 +480,48 @@ class BrowserActivity : Activity() {
             }
             playerState.text = if (paused) "▶" else "❚❚"
             if (d > 0 && d.isFinite()) {
+                lastPos = t; lastDur = d
+                if (SystemClock.uptimeMillis() - lastSavedAt > 10_000) saveProgress()
                 playerProgress.progress = ((t / d) * 1000).toInt()
                 playerProgress.secondaryProgress = ((b / d) * 1000).toInt()
                 playerTime.text = getString(R.string.player_time, fmt(t), fmt(d))
             }
         }
+    }
+
+    // ---------- Continue Watching ----------
+
+    private fun applyResume() {
+        if (resumeApplied || resumeAt < 30) return
+        resumeApplied = true
+        val target = resumeAt
+        webView.evaluateJavascript("window.__tv && window.__tv.seekTo($target)", null)
+        seekFlash.text = getString(R.string.resuming_at, WatchHistory.fmtClock(target))
+        seekFlash.visibility = View.VISIBLE
+        hintHandler.removeCallbacksAndMessages(null)
+        hintHandler.postDelayed({ seekFlash.visibility = View.GONE }, 2500)
+        // Some players ignore the first seek while still starting: check and retry
+        pollHandler.postDelayed({
+            if (theater && lastPos < target - 30) webView.evaluateJavascript("window.__tv && window.__tv.seekTo($target)", null)
+        }, 2500)
+    }
+
+    private fun saveProgress() {
+        lastSavedAt = SystemClock.uptimeMillis()
+        if (startUrl.isBlank() || lastDur < 300 || !resumeApplied && resumeAt >= 30) return
+        // Only save for the movie this screen was opened for
+        val cur = webView.url ?: return
+        if (WatchHistory.key(cur) != WatchHistory.key(startUrl)) return
+        WatchHistory.save(this, WatchHistory.Entry(
+            url = startUrl,
+            title = movieTitle ?: cleanTitle(webView.title),
+            poster = intent.getStringExtra(EXTRA_POSTER) ?: "",
+            meta = intent.getStringExtra(EXTRA_META) ?: "",
+            desc = intent.getStringExtra(EXTRA_DESC) ?: "",
+            position = lastPos.toLong(),
+            duration = lastDur.toLong(),
+            updated = System.currentTimeMillis()
+        ))
     }
 
     private fun fmt(sec: Double): String {
@@ -697,6 +749,7 @@ class BrowserActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        if (lastDur > 0) saveProgress()
         webView.onPause()
         CookieManager.getInstance().flush()
     }
