@@ -724,19 +724,15 @@ class BrowserActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         when {
-            loading -> finish()
-            customView != null -> exitFullscreen()
-            theater -> {
-                webView.evaluateJavascript("window.__tv && window.__tv.exit()", null)
-                setTheater(false)
+            // Watching a movie (or still loading it): one press leaves the player
+            loading || theater || customView != null || isWatchPage(webView.url) -> {
+                if (lastDur > 0) saveProgress()
+                finish()
             }
             pointerMode -> togglePointer()
-            webView.canGoBack() -> webView.goBack()
-            SystemClock.uptimeMillis() - lastBackPress < 2000 -> super.onBackPressed()
-            else -> {
-                lastBackPress = SystemClock.uptimeMillis()
-                toast(getString(R.string.press_back_again))
-            }
+            // Other Einthusan pages (login, account…): go back a page, or close if there is none
+            webView.canGoBack() && !isWatchPage(webView.copyBackForwardList().currentItem?.url) -> webView.goBack()
+            else -> finish()
         }
     }
 
