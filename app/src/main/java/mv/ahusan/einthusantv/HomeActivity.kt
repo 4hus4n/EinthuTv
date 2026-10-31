@@ -29,6 +29,10 @@ class HomeActivity : Activity() {
     companion object {
         // Asked once per app start; "Skip for now" stops it until the app is reopened
         private var loginAskedThisRun = false
+        // Splash plays once per app start
+        private var splashPlayed = false
+        private const val SPLASH_MIN_MS = 2400L
+        private const val SPLASH_MAX_MS = 9000L
         private const val SLIDE_MS = 6000L
         private const val PAUSE_AFTER_KEY_MS = 8000L
         private const val MAX_SLIDES = 8
@@ -65,6 +69,11 @@ class HomeActivity : Activity() {
     private var heroMovie: Movie? = null
 
     // Hero slides (trending)
+    private lateinit var splash: View
+    private var splashStart = 0L
+    private var splashHiding = false
+    private val splashAnims = mutableListOf<android.animation.Animator>()
+
     private val slides = mutableListOf<Movie>()
     private var slideIndex = 0
     private var lastKeyAt = 0L
@@ -127,7 +136,14 @@ class HomeActivity : Activity() {
         reload()
         btnPlay.requestFocus()
 
-        if (!loginAskedThisRun) checkLogin()
+        splash = findViewById(R.id.splash)
+        if (!splashPlayed) {
+            splashPlayed = true
+            playSplash()
+        } else {
+            splash.visibility = View.GONE
+            if (!loginAskedThisRun) checkLogin()
+        }
     }
 
     override fun onResume() {
@@ -146,6 +162,10 @@ class HomeActivity : Activity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (splash.visibility == View.VISIBLE) {
+            if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) finish()
+            return true
+        }
         lastKeyAt = SystemClock.uptimeMillis()
         return super.dispatchKeyEvent(event)
     }
@@ -191,6 +211,7 @@ class HomeActivity : Activity() {
             loader.load(Nav.withPage(url, p)) { movies ->
                 val fresh = movies.filter { seen.add(it.url) }
                 fresh.forEach { m -> strip.addView(Nav.movieCard(this, strip, m, lang)) }
+                if (fresh.isNotEmpty()) hideSplash()
                 if (feedsHero) addSlides(fresh)
                 if (p == pages) {
                     if (seen.isEmpty()) {
@@ -209,6 +230,103 @@ class HomeActivity : Activity() {
                 }
             }
         }
+    }
+
+    // ---------- Splash ----------
+
+    private fun playSplash() {
+        splash.visibility = View.VISIBLE
+        splash.alpha = 1f
+        splash.requestFocus()
+        splashStart = SystemClock.uptimeMillis()
+        val d = resources.displayMetrics.density
+
+        val glow = findViewById<View>(R.id.splashGlow)
+        val logo = findViewById<View>(R.id.splashLogo)
+        val strip = findViewById<View>(R.id.splashStrip)
+        val play = findViewById<View>(R.id.splashPlay)
+        val title = findViewById<LinearLayout>(R.id.splashTitle)
+        val tag = findViewById<View>(R.id.splashTag)
+        val track = findViewById<View>(R.id.splashTrack)
+        val bar = findViewById<View>(R.id.splashBar)
+        val credit = findViewById<View>(R.id.splashCredit)
+
+        // 1. Glow breathes in
+        glow.scaleX = 0.6f; glow.scaleY = 0.6f
+        glow.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(900).start()
+
+        // 2. Film strip drops in with a bounce
+        strip.translationY = -60 * d; strip.rotation = -14f; strip.scaleX = 0.6f; strip.scaleY = 0.6f
+        strip.animate().alpha(1f).translationY(0f).rotation(0f).scaleX(1f).scaleY(1f)
+            .setStartDelay(150).setDuration(750)
+            .setInterpolator(android.view.animation.OvershootInterpolator(1.6f)).start()
+
+        // 3. Play button pops, then pulses
+        play.scaleX = 0f; play.scaleY = 0f
+        play.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(750).setDuration(450)
+            .setInterpolator(android.view.animation.OvershootInterpolator(3f))
+            .withEndAction {
+                val px = android.animation.ObjectAnimator.ofFloat(play, View.SCALE_X, 1f, 1.14f, 1f)
+                val py = android.animation.ObjectAnimator.ofFloat(play, View.SCALE_Y, 1f, 1.14f, 1f)
+                listOf(px, py).forEach {
+                    it.duration = 1100; it.repeatCount = android.animation.ValueAnimator.INFINITE
+                    it.start(); splashAnims.add(it)
+                }
+            }.start()
+
+        // Logo gently floats
+        val bob = android.animation.ObjectAnimator.ofFloat(logo, View.TRANSLATION_Y, 0f, -6 * d, 0f)
+        bob.duration = 2200; bob.startDelay = 900; bob.repeatCount = android.animation.ValueAnimator.INFINITE
+        bob.interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+        bob.start(); splashAnims.add(bob)
+
+        // 4. Title letters rise in one by one
+        title.removeAllViews()
+        val word = "EINTHUTV"
+        word.forEachIndexed { i, ch ->
+            val tv = TextView(this).apply {
+                text = ch.toString()
+                textSize = 54f
+                setTypeface(android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.BOLD))
+                setTextColor(if (i < 6) getColor(R.color.accent) else 0xFFFFFFFF.toInt())
+                alpha = 0f
+                translationY = 28 * d
+                letterSpacing = 0.04f
+            }
+            title.addView(tv)
+            tv.animate().alpha(1f).translationY(0f)
+                .setStartDelay(1050L + i * 70L).setDuration(380)
+                .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        }
+
+        // 5. Tagline, loading bar and credit
+        tag.translationY = 10 * d
+        tag.animate().alpha(1f).translationY(0f).setStartDelay(1750).setDuration(500).start()
+        track.animate().alpha(1f).setStartDelay(1900).setDuration(400).start()
+        credit.animate().alpha(1f).setStartDelay(2000).setDuration(500).start()
+        val sweep = android.animation.ObjectAnimator.ofFloat(bar, View.TRANSLATION_X, -80 * d, 240 * d)
+        sweep.duration = 1100; sweep.repeatCount = android.animation.ValueAnimator.INFINITE
+        sweep.interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+        sweep.start(); splashAnims.add(sweep)
+
+        // Never longer than SPLASH_MAX_MS, even if the internet is slow
+        splash.postDelayed({ hideSplash() }, SPLASH_MAX_MS)
+    }
+
+    private fun hideSplash() {
+        if (!::splash.isInitialized || splash.visibility != View.VISIBLE || splashHiding) return
+        val wait = SPLASH_MIN_MS - (SystemClock.uptimeMillis() - splashStart)
+        if (wait > 0) { splash.postDelayed({ hideSplash() }, wait); return }
+        splashHiding = true
+        val logo = findViewById<View>(R.id.splashCenter)
+        logo.animate().scaleX(1.12f).scaleY(1.12f).setDuration(450).start()
+        splash.animate().alpha(0f).setDuration(450).withEndAction {
+            splashAnims.forEach { it.cancel() }
+            splashAnims.clear()
+            splash.visibility = View.GONE
+            btnPlay.requestFocus()
+            if (!loginAskedThisRun) checkLogin()
+        }.start()
     }
 
     // ---------- Continue Watching ----------
@@ -272,7 +390,7 @@ class HomeActivity : Activity() {
             return
         }
         buildDots()
-        if (wasEmpty) goSlide(0, animate = false)
+        if (wasEmpty) { goSlide(0, animate = false); hideSplash() }
     }
 
     private fun buildDots() {

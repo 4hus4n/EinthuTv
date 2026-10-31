@@ -227,4 +227,6 @@
                 android:orientation="vertical" />
         </LinearLayout>
     </ScrollView>
+
+    <include layout="@layout/splash_overlay" />
 </FrameLayout>
