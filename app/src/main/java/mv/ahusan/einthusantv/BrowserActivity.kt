@@ -218,6 +218,29 @@ class BrowserActivity : Activity() {
     private val pollHandler = Handler(Looper.getMainLooper())
     private val loadHandler = Handler(Looper.getMainLooper())
 
+    // Watches playback position on movie pages (independent of the video-only view)
+    private val progressTask = object : Runnable {
+        override fun run() {
+            if (!isWatchPage(webView.url)) return
+            readProgress()
+            pollHandler.postDelayed(this, 3000)
+        }
+    }
+
+    private fun readProgress() {
+        webView.evaluateJavascript("window.__tv ? window.__tv.state() : null") { raw ->
+            val json = try { JSONTokener(raw ?: "null").nextValue() as? String } catch (e: Exception) { null }
+                ?: return@evaluateJavascript
+            val o = try { JSONObject(json) } catch (e: Exception) { return@evaluateJavascript }
+            val t = o.optDouble("t", 0.0)
+            val d = o.optDouble("d", 0.0)
+            if (!d.isFinite() || d < 300) return@evaluateJavascript
+            lastPos = t; lastDur = d
+            if (!resumeApplied && t > 1) applyResume()
+            if (SystemClock.uptimeMillis() - lastSavedAt > 10_000) saveProgress()
+        }
+    }
+
     private val pollTask = object : Runnable {
         override fun run() {
             if (!theater) return
@@ -327,6 +350,8 @@ class BrowserActivity : Activity() {
                 progress.visibility = View.GONE
                 injectTvHelpers()
                 if (isWatchPage(url)) {
+                    pollHandler.removeCallbacks(progressTask)
+                    pollHandler.postDelayed(progressTask, 3000)
                     webView.evaluateJavascript(THEATER_JS, null)
                     if (loading) {
                         loadStatus.text = getString(R.string.load_starting)
@@ -492,7 +517,8 @@ class BrowserActivity : Activity() {
     // ---------- Continue Watching ----------
 
     private fun applyResume() {
-        if (resumeApplied || resumeAt < 30) return
+        if (resumeApplied) return
+        if (resumeAt < 30) { resumeApplied = true; return }
         resumeApplied = true
         val target = resumeAt
         webView.evaluateJavascript("window.__tv && window.__tv.seekTo($target)", null)
@@ -502,16 +528,20 @@ class BrowserActivity : Activity() {
         hintHandler.postDelayed({ seekFlash.visibility = View.GONE }, 2500)
         // Some players ignore the first seek while still starting: check and retry
         pollHandler.postDelayed({
-            if (theater && lastPos < target - 30) webView.evaluateJavascript("window.__tv && window.__tv.seekTo($target)", null)
+            if (lastPos < target - 30) webView.evaluateJavascript("window.__tv && window.__tv.seekTo($target)", null)
         }, 2500)
     }
+
+    private fun movieId(url: String?): String? =
+        url?.let { Regex("/movie/watch/([^/?#]+)").find(it)?.groupValues?.get(1) }
 
     private fun saveProgress() {
         lastSavedAt = SystemClock.uptimeMillis()
         if (startUrl.isBlank() || lastDur < 300 || !resumeApplied && resumeAt >= 30) return
         // Only save for the movie this screen was opened for
         val cur = webView.url ?: return
-        if (WatchHistory.key(cur) != WatchHistory.key(startUrl)) return
+        val id = movieId(startUrl)
+        if (id != null && movieId(cur) != id) return
         WatchHistory.save(this, WatchHistory.Entry(
             url = startUrl,
             title = movieTitle ?: cleanTitle(webView.title),
@@ -750,6 +780,7 @@ class BrowserActivity : Activity() {
     override fun onPause() {
         super.onPause()
         if (lastDur > 0) saveProgress()
+        pollHandler.removeCallbacks(progressTask)
         webView.onPause()
         CookieManager.getInstance().flush()
     }
@@ -759,6 +790,7 @@ class BrowserActivity : Activity() {
         webView.onResume()
         hideSystemUi()
         if (theater) pollHandler.post(pollTask)
+        if (isWatchPage(webView.url)) pollHandler.postDelayed(progressTask, 3000)
     }
 
     override fun onDestroy() {
